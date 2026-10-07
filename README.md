@@ -27,8 +27,8 @@ sv-association-architecture/
 2. Create and activate a Conda environment (recommended):
 
    ```bash
-   conda create -n sv-architecture python=3.14 pip -y
-   conda activate sv-architecture
+   conda create -n svassoc python=3.14 pip -y
+   conda activate svassoc
    ```
 
 3. Install the dependencies:
