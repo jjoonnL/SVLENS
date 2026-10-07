@@ -1,8 +1,6 @@
 # SV association architecture
 
-Code for the analyses underlying a study of rare structural-variant (SV) gene-level associations in UK Biobank whole-genome sequencing. This is an eight-stage research reproduction pipeline, not a copy of the working notebooks or a general-purpose package. It includes statistical analyses, a fixed trait mapping, and an input schema; it omits restricted association data, generated results, figure layout, and Supplementary Table formatting.
-
-The primary analysis uses SV MAF <5% and 72 non-ratio traits. The fixed manuscript set comprises 404 significant gene–trait associations, 193 genes, and 169 exact lead SVs. Rare-SNV convergence used matched GENCODE gene-body membership: 204/363 evaluable SV associations (56.2%) had rare-SNV gene-level support, versus 4.86869/363 under the matched null (41.90-fold). These are reference checks, not bundled output.
+Analysis code for our manuscript on rare structural-variant association architecture in UK Biobank whole-genome sequencing.
 
 ## Environment and inputs
 
