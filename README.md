@@ -4,16 +4,15 @@ Analysis code for *Gene-level analysis of structural variants reveals a lead-var
 
 ## Set up the environment
 
-From the repository directory, create a Python 3.14 virtual environment and install the pinned packages in [`requirements.txt`](requirements.txt):
+We recommend Conda. From the repository directory, create a Python 3.14 environment and install the pinned packages in [`requirements.txt`](requirements.txt):
 
 ```bash
-python3.14 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
+conda create -n sv-architecture python=3.14 pip -y
+conda activate sv-architecture
 python -m pip install -r requirements.txt
 ```
 
-Run the analysis commands below with this environment active. Use `deactivate` when finished. The `.venv/` directory is ignored by Git.
+Run the analysis commands below with this environment active. Use `conda deactivate` when finished.
 
 ## Inputs
 
