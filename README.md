@@ -1,6 +1,6 @@
 # SV association architecture
 
-Analysis code for our manuscript on rare structural-variant association architecture in UK Biobank whole-genome sequencing.
+Analysis code accompanying the manuscript on rare structural-variant association architecture in UK Biobank whole-genome sequencing.
 
 ## Environment and inputs
 
