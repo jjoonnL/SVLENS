@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from svarch.acat import SV_TYPES, acat_pvalue, run_acat_gene
+from acat import SV_TYPES, acat_pvalue, run_acat_gene
 
 
 # Association master and exact lead-SV recurrence

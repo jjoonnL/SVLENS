@@ -12,7 +12,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from svarch.acat import acat_pvalue, run_acat_gene  # noqa: E402
+from acat import acat_pvalue, run_acat_gene  # noqa: E402
 
 
 def load_reference_module():

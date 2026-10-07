@@ -21,7 +21,7 @@ import pandas as pd
 from scipy.stats import hypergeom, mannwhitneyu
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from svarch.acat import run_acat_gene
+from acat import run_acat_gene
 
 
 PROJECT_ROOT = RESULTS_DIR = PRIMARY_DIR = OUT_DIR = None

@@ -7,7 +7,7 @@ Code for *Gene-level analysis of structural variants reveals a lead-variant-cent
 ```text
 sv-association-architecture/
 ├── scripts/             # Eight analysis stages, in execution order
-├── src/svarch/          # Shared ACAT implementation
+├── src/acat.py          # Shared ACAT implementation
 ├── metadata/            # Trait categories, families, and ratio flags
 ├── examples/            # Required input filenames and columns
 ├── docs/                # Manuscript result-to-code provenance

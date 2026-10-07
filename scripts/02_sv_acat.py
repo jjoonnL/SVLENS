@@ -20,7 +20,7 @@ from scipy.stats import beta as beta_dist
 from statsmodels.stats.multitest import multipletests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from svarch.acat import run_acat_gene, SV_TYPES
+from acat import run_acat_gene, SV_TYPES
 
 # ── 경로 설정 ─────────────────────────────────────────────────────────────────
 BASE = ASSOC_DIR = SHARED_DIR = GENE_TABLE = GTF_PATH = None
