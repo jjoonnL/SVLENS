@@ -16,8 +16,16 @@ from svarch.acat import acat_pvalue, run_acat_gene  # noqa: E402
 
 
 def load_reference_module():
-    path = ROOT / "scripts" / "01_prepare_reference.py"
+    path = ROOT / "scripts" / "01_reference.py"
     spec = importlib.util.spec_from_file_location("prepare_reference", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_script(name):
+    path = ROOT / "scripts" / name
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -54,6 +62,30 @@ class CoreMethodTests(unittest.TestCase):
         self.assertEqual(table["gene_end"].tolist(), [200, 450])
         self.assertEqual(table["tss"].tolist(), [100, 450])
         self.assertTrue(np.all(table["promoter_start"].to_numpy() >= 0))
+
+    def test_merged_stage_order(self):
+        cases = [
+            ("03_lead_architecture.py", [
+                "_stage_primary", "_stage_decomposition", "_stage_criticality",
+            ]),
+            ("04_recurrence.py", [
+                "_stage_qc", "_stage_enrichment", "_stage_locus_audit",
+            ]),
+            ("07_snv_convergence.py", [
+                "_stage_convergence", "_stage_representatives",
+            ]),
+        ]
+        for filename, names in cases:
+            with self.subTest(script=filename):
+                module = load_script(filename)
+                called = []
+                with patch("sys.argv", [filename, "--project-root", "/private/example"]):
+                    with patch.multiple(module, **{
+                        name: lambda args, stage=name: called.append(stage)
+                        for name in names
+                    }):
+                        module.main()
+                self.assertEqual(called, names)
 
 
 if __name__ == "__main__":

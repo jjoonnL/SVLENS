@@ -3,8 +3,8 @@ NFE Quantitative Traits Pipeline
 Steps 2 (sv_annotation) + 3 (weight_acat) 일괄 실행
 
 Usage:
-    python scripts/02_03_run_sv_gene_acat.py --project-root /path/to/private-data-root
-    python scripts/02_03_run_sv_gene_acat.py --project-root /path/to/private-data-root --step3-only
+    python scripts/02_sv_acat.py --project-root /path/to/private-data-root
+    python scripts/02_sv_acat.py --project-root /path/to/private-data-root --step3-only
 
 Options:
     --skip-done   : 이미 완료된 trait 건너뜀 (기본값: True)

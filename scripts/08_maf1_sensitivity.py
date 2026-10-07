@@ -9,7 +9,7 @@ results are read only and are never overwritten.
 
 from __future__ import annotations
 
-import os
+import argparse
 import sys
 from collections import Counter
 from itertools import product
@@ -24,12 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from svarch.acat import run_acat_gene
 
 
-if not os.environ.get("SVARCH_PROJECT_ROOT"):
-    raise SystemExit("Set SVARCH_PROJECT_ROOT to the private analysis directory")
-PROJECT_ROOT = Path(os.environ["SVARCH_PROJECT_ROOT"]).expanduser().resolve()
-RESULTS_DIR = PROJECT_ROOT / "results"
-PRIMARY_DIR = RESULTS_DIR / "sv_pleiotropy"
-OUT_DIR = PRIMARY_DIR / "maf1_sensitivity"
+PROJECT_ROOT = RESULTS_DIR = PRIMARY_DIR = OUT_DIR = None
 
 MAF_CUTOFF = 0.01
 
@@ -357,6 +352,14 @@ def recurrent_feature_comparison(lead_summary: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--project-root", type=Path, required=True)
+    args = parser.parse_args()
+    global PROJECT_ROOT, RESULTS_DIR, PRIMARY_DIR, OUT_DIR
+    PROJECT_ROOT = args.project_root.expanduser().resolve()
+    RESULTS_DIR = PROJECT_ROOT / "results"
+    PRIMARY_DIR = RESULTS_DIR / "sv_pleiotropy"
+    OUT_DIR = PRIMARY_DIR / "maf1_sensitivity"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     trait_paths = sorted(RESULTS_DIR.glob("*/sv_weighted.parquet"))
     trait_paths = [p for p in trait_paths if p.parent.name not in RATIO_TRAITS]

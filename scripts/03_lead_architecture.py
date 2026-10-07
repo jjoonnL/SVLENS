@@ -1,22 +1,9 @@
-"""Audit lead-SV criticality and residual-SV locality in the primary results.
-
-Part 1 performs exhaustive leave-one-SV-out gene-level ACAT recalculation for
-all 404 significant gene-trait associations. It compares loss of significance
-after removal of the predefined lead SV with the loss expected after removing
-a uniformly selected member of the same SV set.
-
-Part 2 is restricted to the 57 multi-SV-supported associations. It compares
-the distance and SV-type concordance between the lead SV and the strongest
-residual SV with a conditional null obtained by selecting another nonlead SV
-from the same gene-trait set. This preserves the observed gene, lead position,
-SV density, candidate intervals, and candidate SV types. Neither analysis
-establishes independence or causality, which would require individual-level
-conditional or haplotype data.
-"""
+"""Build significant SV associations, classify lead removal, and audit residual SVs."""
 
 from __future__ import annotations
 
-import os
+import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -24,21 +11,341 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from svarch.acat import SV_TYPES, acat_pvalue
+from svarch.acat import SV_TYPES, acat_pvalue, run_acat_gene
 
 
-if not os.environ.get("SVARCH_PROJECT_ROOT"):
-    raise SystemExit("Set SVARCH_PROJECT_ROOT to the private analysis directory")
-PROJECT_ROOT = Path(os.environ["SVARCH_PROJECT_ROOT"]).expanduser().resolve()
-RESULTS_DIR = PROJECT_ROOT / "results"
-PLEIOTROPY_DIR = RESULTS_DIR / "sv_pleiotropy"
-DRIVER_PATH = (
-    PLEIOTROPY_DIR
-    / "driver_decomposition/lead_sv_driver_decomposition.non_ratio_primary.csv"
-)
-OUT_DIR = PLEIOTROPY_DIR / "lead_criticality_locality_audit"
+# Association master and exact lead-SV recurrence
+def annotation_layer(row):
+    if bool(row["is_cds"]) or bool(row["is_utr"]) or bool(row["is_promoter"]):
+        return "Functional"
+    return "Intronic" if bool(row["is_intronic"]) else "Other"
 
+
+def sv_representation_tag(sv_id):
+    match = re.search(r"<([^:>]+):SVSIZE=([^:>]+):([^>]+)>", str(sv_id))
+    return match.group(3) if match else None
+
+
+def join_unique(values):
+    return "; ".join(sorted(pd.Series(values).dropna().astype(str).unique()))
+
+
+def read_significant_trait(trait_dir, category):
+    acat = pd.read_parquet(trait_dir / "acat_gene.parquet")
+    threshold = 0.05 / len(acat)
+    significant = acat.loc[acat["p_acat_o"].lt(threshold)].copy()
+    if significant.empty:
+        return significant
+
+    weighted = pd.read_parquet(trait_dir / "sv_weighted.parquet").copy()
+    weighted["lead_sv_layer"] = weighted.apply(annotation_layer, axis=1)
+    lead = (
+        weighted.sort_values(["gene_id", "pval", "maf"])
+        .drop_duplicates("gene_id", keep="first")
+        .rename(columns={
+            "sv_id": "lead_sv_id", "chrom": "lead_sv_chrom",
+            "sv_start": "lead_sv_start", "sv_end": "lead_sv_end",
+            "sv_type": "lead_sv_type", "svsize": "lead_sv_size",
+            "Beta": "lead_sv_beta", "SE": "lead_sv_se",
+            "pval": "lead_sv_p", "maf": "lead_sv_maf",
+        })
+    )
+    lead_columns = [
+        "gene_id", "lead_sv_id", "lead_sv_chrom", "lead_sv_start", "lead_sv_end",
+        "lead_sv_type", "lead_sv_size", "lead_sv_beta", "lead_sv_se",
+        "lead_sv_p", "lead_sv_maf", "is_cds", "is_utr", "is_promoter",
+        "is_intronic", "lead_sv_layer",
+    ]
+    out = significant.merge(lead[lead_columns], on="gene_id", validate="one_to_one")
+    out["trait"] = trait_dir.name
+    out["trait_category"] = category
+    out["sv_bonf_threshold"] = threshold
+    out["sv_bonf"] = True
+    out["lead_sv_pos"] = (
+        (out["lead_sv_start"] + out["lead_sv_end"]) / 2
+    ).round().astype("Int64")
+    out["sv_repr_tag"] = out["lead_sv_id"].map(sv_representation_tag)
+    return out
+
+
+def build_master(results_dir, metadata):
+    category = metadata.set_index("trait")["category"].to_dict()
+    trait_dirs = sorted(
+        path for path in results_dir.iterdir()
+        if path.is_dir() and (path / "acat_gene.parquet").exists()
+        and (path / "sv_weighted.parquet").exists()
+    )
+    unknown = {path.name for path in trait_dirs} - set(category)
+    if unknown:
+        raise ValueError(f"Traits missing from metadata: {sorted(unknown)}")
+    missing = set(category) - {path.name for path in trait_dirs}
+    if missing:
+        raise ValueError(f"Missing per-trait ACAT results: {sorted(missing)}")
+    rows = [read_significant_trait(path, category[path.name]) for path in trait_dirs]
+    nonempty = [row for row in rows if not row.empty]
+    if not nonempty:
+        raise ValueError("No significant SV gene–trait associations")
+    master = pd.concat(nonempty, ignore_index=True)
+    genes = pd.read_parquet(results_dir / "gene_table.parquet")
+    gene_columns = [
+        "gene_id", "chrom", "gene_start", "gene_end",
+        "promoter_start", "promoter_end",
+    ]
+    master = master.merge(genes[gene_columns], on="gene_id", validate="many_to_one")
+    master["gene_length"] = master["gene_end"] - master["gene_start"]
+    master["support_class_final"] = "not_assessed"
+    return master
+
+
+def exact_lead_recurrence(master):
+    lead = (
+        master.groupby("lead_sv_id", dropna=False)
+        .agg(
+            genes=("gene_name", join_unique), n_genes=("gene_name", "nunique"),
+            n_traits_non_ratio=("trait", "nunique"),
+            traits_non_ratio=("trait", join_unique),
+            fine_categories_non_ratio=("trait_category", join_unique),
+            broad_modules_non_ratio=("broad_module", join_unique),
+            lead_sv_chrom=("lead_sv_chrom", "first"),
+            lead_sv_pos=("lead_sv_pos", "median"),
+            lead_sv_type=("lead_sv_type", "first"),
+            lead_sv_layer=("lead_sv_layer", join_unique),
+            lead_sv_size=("lead_sv_size", "first"),
+            lead_sv_maf=("lead_sv_maf", "median"),
+            min_lead_sv_p_non_ratio=("lead_sv_p", "min"),
+            min_p_acat_o_non_ratio=("p_acat_o", "min"),
+            support_classes_non_ratio=("support_class_final", join_unique),
+        )
+        .reset_index()
+    )
+    lead["is_recurrent_non_ratio"] = lead["n_traits_non_ratio"].ge(2)
+    return lead.sort_values(
+        ["is_recurrent_non_ratio", "n_traits_non_ratio", "min_p_acat_o_non_ratio"],
+        ascending=[False, False, True],
+    ).reset_index(drop=True)
+
+
+def _stage_primary(args):
+    metadata = pd.read_csv(args.traits, sep="\t")
+    results_dir = args.project_root / "results"
+    output = results_dir / "sv_pleiotropy"
+    master = build_master(results_dir, metadata)
+    metadata_indexed = metadata.set_index("trait")
+    master["broad_module"] = master["trait"].map(metadata_indexed["broad_module"])
+    master["is_ratio_trait"] = master["trait"].map(metadata_indexed["is_ratio"]).astype(bool)
+    non_ratio = master.loc[~master["is_ratio_trait"]].copy()
+    recurrence = exact_lead_recurrence(non_ratio)
+    all_counts = master.groupby("lead_sv_id")["trait"].nunique()
+    recurrence["n_traits_all"] = recurrence["lead_sv_id"].map(all_counts)
+    recurrence["n_ratio_trait_hits_removed"] = (
+        recurrence["n_traits_all"] - recurrence["n_traits_non_ratio"]
+    )
+    output.mkdir(parents=True, exist_ok=True)
+    master.to_csv(output / "sv_pleiotropy_master.csv", index=False)
+    non_ratio.to_csv(output / "sv_pleiotropy_master.non_ratio_primary.csv", index=False)
+    recurrence.to_csv(output / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv", index=False)
+    recurrence.loc[recurrence["is_recurrent_non_ratio"]].to_csv(
+        output / "candidate_recurrent_lead_svs.non_ratio_primary.csv", index=False
+    )
+    print(
+        f"{len(non_ratio)} associations, {non_ratio['gene_id'].nunique()} genes, "
+        f"{non_ratio['lead_sv_id'].nunique()} exact lead SVs"
+    )
+
+
+# Lead-SV removal classification
+P_FLOOR = 1e-300
+
+
+def safe_logp(value):
+    return np.nan if pd.isna(value) else -np.log10(max(float(value), P_FLOOR))
+
+
+def summarize_gene_svs(gene_sv):
+    valid = gene_sv.loc[gene_sv["w_final"].notna()]
+    if valid.empty:
+        return pd.DataFrame()
+    per_sv = (
+        valid.groupby("sv_id", dropna=False)
+        .agg(
+            sv_type=("sv_type", "first"), svsize=("svsize", "first"),
+            maf=("maf", "first"), min_pval=("pval", "min"),
+            n_rows=("sv_id", "size"),
+        )
+        .reset_index()
+        .sort_values(["min_pval", "sv_id"])
+        .reset_index(drop=True)
+    )
+    per_sv["rank_by_pval"] = np.arange(1, len(per_sv) + 1)
+    return per_sv
+
+
+def without_lead_acat(gene_sv, lead_sv_id, gene_id, gene_name):
+    remaining = gene_sv.loc[gene_sv["sv_id"].ne(lead_sv_id)]
+    if remaining.empty or remaining["w_final"].notna().sum() == 0:
+        return np.nan, 0, 0
+    _, genes = run_acat_gene(remaining)
+    if genes.empty:
+        return np.nan, 0, 0
+    match = genes.loc[genes["gene_id"].eq(gene_id)]
+    if match.empty:
+        match = genes.loc[genes["gene_name"].eq(gene_name)]
+    if match.empty:
+        return np.nan, 0, int(remaining["w_final"].notna().sum())
+    row = match.iloc[0]
+    return float(row["p_acat_o"]), int(row["n_strata"]), int(row["n_sv_total"])
+
+
+def decompose_hit(hit, weighted):
+    gene_sv = weighted.loc[weighted["gene_id"].eq(hit["gene_id"])].copy()
+    if gene_sv.empty:
+        gene_sv = weighted.loc[weighted["gene_name"].eq(hit["gene_name"])].copy()
+    row = hit.to_dict()
+    row["status"] = "ok"
+    row["n_sv_rows_original"] = len(gene_sv)
+    row["n_sv_valid_original"] = int(gene_sv["w_final"].notna().sum()) if not gene_sv.empty else 0
+    if gene_sv.empty:
+        row["status"] = "gene_missing_in_weighted"
+        row["driver_class"] = "lead_missing_or_error"
+        return row
+
+    per_sv = summarize_gene_svs(gene_sv)
+    if per_sv.empty:
+        row["status"] = "no_valid_sv_for_gene"
+        row["driver_class"] = "lead_missing_or_error"
+        return row
+    row["n_unique_sv_original"] = len(per_sv)
+    best = per_sv.iloc[0]
+    second = per_sv.iloc[1] if len(per_sv) > 1 else None
+    row["best_sv_id"] = best["sv_id"]
+    row["best_sv_pval"] = float(best["min_pval"])
+    row["best_sv_type"] = best["sv_type"]
+    row["best_sv_maf"] = float(best["maf"])
+    row["second_sv_id"] = second["sv_id"] if second is not None else np.nan
+    row["second_sv_pval"] = float(second["min_pval"]) if second is not None else np.nan
+    row["second_sv_type"] = second["sv_type"] if second is not None else np.nan
+    row["second_sv_maf"] = float(second["maf"]) if second is not None else np.nan
+    lead_rows = per_sv.loc[per_sv["sv_id"].eq(hit["lead_sv_id"])]
+    if lead_rows.empty:
+        row["status"] = "lead_missing_in_weighted"
+        row["driver_class"] = "lead_missing_or_error"
+        return row
+
+    lead = lead_rows.iloc[0]
+    row["lead_rank_by_pval"] = int(lead["rank_by_pval"])
+    row["lead_pval_weighted"] = float(lead["min_pval"])
+    row["lead_maf_weighted"] = float(lead["maf"])
+    row["lead_sv_type_weighted"] = lead["sv_type"]
+    row["lead_sv_size_weighted"] = int(lead["svsize"])
+    row["lead_neglog10_pval"] = safe_logp(lead["min_pval"])
+    row["second_neglog10_pval"] = safe_logp(row["second_sv_pval"])
+    row["lead_second_log10_margin"] = (
+        row["lead_neglog10_pval"] - row["second_neglog10_pval"]
+        if pd.notna(row["second_neglog10_pval"]) else np.nan
+    )
+    p_without, n_strata, n_sv = without_lead_acat(
+        gene_sv, hit["lead_sv_id"], hit["gene_id"], hit["gene_name"]
+    )
+    row["p_acat_o_without_lead"] = p_without
+    row["n_strata_without_lead"] = n_strata
+    row["n_sv_without_lead"] = n_sv
+    threshold = float(hit["sv_bonf_threshold"])
+    row["original_bonf_significant"] = float(hit["p_acat_o"]) < threshold
+    row["without_lead_bonf_significant"] = bool(pd.notna(p_without) and p_without < threshold)
+    row["original_neglog10_p"] = safe_logp(hit["p_acat_o"])
+    row["without_lead_neglog10_p"] = safe_logp(p_without)
+    row["delta_neglog10_original_minus_without"] = (
+        row["original_neglog10_p"] - row["without_lead_neglog10_p"]
+        if pd.notna(row["without_lead_neglog10_p"]) else np.nan
+    )
+    row["lead_not_best_by_pval"] = row["lead_rank_by_pval"] != 1
+    row["low_margin_to_second_sv"] = bool(
+        pd.notna(row["lead_second_log10_margin"])
+        and row["lead_second_log10_margin"] < 1.0
+    )
+    row["driver_class"] = (
+        "single_sv_only" if row["n_sv_valid_original"] <= 1 or pd.isna(p_without)
+        else "multi_sv_supported" if row["without_lead_bonf_significant"]
+        else "lead_anchored"
+    )
+    return row
+
+
+def run(master, results_dir):
+    required = {"trait", "gene_id", "gene_name", "p_acat_o", "sv_bonf_threshold", "lead_sv_id"}
+    missing = required - set(master.columns)
+    if missing:
+        raise ValueError(f"Association master is missing columns: {sorted(missing)}")
+    rows = []
+    for trait, hits in master.groupby("trait", sort=True):
+        path = results_dir / trait / "sv_weighted.parquet"
+        weighted = pd.read_parquet(path)
+        rows.extend(decompose_hit(hit, weighted) for _, hit in hits.iterrows())
+    return pd.DataFrame(rows)
+
+
+def semicolon_join(values):
+    return "; ".join(sorted(pd.Series(values).dropna().astype(str).unique()))
+
+
+def summarize_by_lead(detail):
+    summary = (
+        detail.groupby(["lead_sv_id", "gene_name"], dropna=False)
+        .agg(
+            n_gene_trait_hits=("trait", "nunique"),
+            traits=("trait", semicolon_join),
+            driver_classes=("driver_class", semicolon_join),
+            n_single_sv_only=("driver_class", lambda x: int(x.eq("single_sv_only").sum())),
+            n_lead_anchored=("driver_class", lambda x: int(x.eq("lead_anchored").sum())),
+            n_multi_sv_supported=("driver_class", lambda x: int(x.eq("multi_sv_supported").sum())),
+            n_lead_missing_or_error=("driver_class", lambda x: int(x.eq("lead_missing_or_error").sum())),
+            median_n_unique_sv_original=("n_unique_sv_original", "median"),
+            median_lead_rank_by_pval=("lead_rank_by_pval", "median"),
+            median_lead_second_log10_margin=("lead_second_log10_margin", "median"),
+            median_delta_neglog10_original_minus_without=("delta_neglog10_original_minus_without", "median"),
+            min_without_lead_p=("p_acat_o_without_lead", "min"),
+            any_without_lead_bonf=("without_lead_bonf_significant", "max"),
+            any_lead_not_best=("lead_not_best_by_pval", "max"),
+            any_low_margin_to_second=("low_margin_to_second_sv", "max"),
+            lead_sv_maf=("lead_sv_maf", "first"),
+            lead_sv_type=("lead_sv_type", "first"),
+            lead_sv_layer=("lead_sv_layer", semicolon_join),
+            support_classes=("support_class_final", semicolon_join),
+        )
+        .reset_index()
+    )
+    summary["frac_lead_anchored_or_single"] = (
+        (summary["n_single_sv_only"] + summary["n_lead_anchored"])
+        / summary["n_gene_trait_hits"]
+    )
+    summary["frac_multi_sv_supported"] = summary["n_multi_sv_supported"] / summary["n_gene_trait_hits"]
+    return summary.sort_values(
+        ["n_gene_trait_hits", "frac_lead_anchored_or_single"], ascending=[False, False]
+    ).reset_index(drop=True)
+
+
+def _stage_decomposition(args):
+    results_dir = args.project_root / "results"
+    output = results_dir / "sv_pleiotropy" / "driver_decomposition"
+    master = pd.read_csv(results_dir / "sv_pleiotropy" / "sv_pleiotropy_master.non_ratio_primary.csv")
+    detail = run(master, results_dir)
+    if len(detail) != len(master) or detail["driver_class"].eq("lead_missing_or_error").any():
+        raise AssertionError("Lead-SV decomposition is incomplete")
+    output.mkdir(parents=True, exist_ok=True)
+    detail.to_csv(output / "lead_sv_driver_decomposition.non_ratio_primary.csv", index=False)
+    summary = detail.groupby("driver_class").size().rename("n").reset_index()
+    summary["pct"] = 100 * summary["n"] / len(detail)
+    summary.to_csv(output / "driver_class_summary.csv", index=False)
+    summarize_by_lead(detail).to_csv(
+        output / "lead_sv_driver_summary.non_ratio_primary.csv", index=False
+    )
+    print(summary.to_string(index=False))
+
+
+# Random-removal and conditional residual-SV audit
 N_PERMUTATIONS = 100_000
+
+
 RANDOM_SEED = 20260914
 
 
@@ -358,7 +665,7 @@ def locality_permutation(
     return pd.DataFrame(rows), distribution
 
 
-def main() -> None:
+def _stage_criticality(args):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     driver = pd.read_csv(DRIVER_PATH)
     if len(driver) != 404:
@@ -448,6 +755,29 @@ def main() -> None:
     if not qc["passed"].all():
         failed = qc.loc[~qc["passed"], "check"].tolist()
         raise AssertionError(f"Step 33 QC failed: {failed}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--project-root", type=Path, required=True)
+    parser.add_argument(
+        "--traits", type=Path,
+        default=Path(__file__).resolve().parents[1] / "metadata/traits.tsv",
+    )
+    args = parser.parse_args()
+    _stage_primary(args)
+    _stage_decomposition(args)
+
+    global PROJECT_ROOT, RESULTS_DIR, PLEIOTROPY_DIR, DRIVER_PATH, OUT_DIR
+    PROJECT_ROOT = args.project_root.expanduser().resolve()
+    RESULTS_DIR = PROJECT_ROOT / "results"
+    PLEIOTROPY_DIR = RESULTS_DIR / "sv_pleiotropy"
+    DRIVER_PATH = (
+        PLEIOTROPY_DIR
+        / "driver_decomposition/lead_sv_driver_decomposition.non_ratio_primary.csv"
+    )
+    OUT_DIR = PLEIOTROPY_DIR / "lead_criticality_locality_audit"
+    _stage_criticality(args)
 
 
 if __name__ == "__main__":
