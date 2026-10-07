@@ -8,6 +8,8 @@ SV_TYPES = ["DEL", "DUP", "INS"]
 P_SMALL = 1e-15
 
 
+# ACAT P-value combination: Liu et al., Am J Hum Genet 2019;104:410-421.
+# doi:10.1016/j.ajhg.2019.01.002
 def acat_pvalue(pvals, weights=None):
     """Combine P values by ACAT, using the small-P Cauchy approximation."""
     pvals = np.asarray(pvals, dtype=float)
@@ -25,6 +27,8 @@ def acat_pvalue(pvals, weights=None):
     return float(np.clip(0.5 - np.arctan(statistic) / np.pi, 0, 1))
 
 
+# Beta(MAF; 1,25) weight choice: Wu et al., Am J Hum Genet 2011;89:82-93.
+# doi:10.1016/j.ajhg.2011.05.029 (weighting precedent; this test uses ACAT).
 def run_acat_gene(sv, min_sv=1):
     """Run MAF-weighted ACAT within SV types, then equal-weight ACAT across types.
 
