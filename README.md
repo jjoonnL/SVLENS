@@ -72,6 +72,4 @@ python scripts/05_sv_features.py --project-root "$data_root"
 python scripts/06_maf1_sensitivity.py --project-root "$data_root"
 ```
 
-Steps 2–6 write under `<DATA_ROOT>/results/`. Figure layout and Supplementary Table formatting are not part of this code release.
-
-The complete pipeline has not been rerun from this distribution copy. No source summary statistics or generated results are redistributed here.
+Steps 2–6 write under `<DATA_ROOT>/results/`.
