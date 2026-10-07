@@ -71,9 +71,6 @@ class CoreMethodTests(unittest.TestCase):
             ("04_recurrence.py", [
                 "_stage_qc", "_stage_enrichment", "_stage_locus_audit",
             ]),
-            ("07_snv_convergence.py", [
-                "_stage_convergence", "_stage_representatives",
-            ]),
         ]
         for filename, names in cases:
             with self.subTest(script=filename):

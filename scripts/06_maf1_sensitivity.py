@@ -504,29 +504,6 @@ def main() -> None:
         ]
     )
 
-    step27_evidence = pd.read_csv(
-        PRIMARY_DIR
-        / "full_sv_rare_snv_convergence_gene_body/step27_candidate_gene_trait_evidence.csv"
-    )
-    maf1_convergence = associations[["trait", "gene_id"]].merge(
-        step27_evidence,
-        on=["trait", "gene_id"],
-        how="inner",
-        validate="one_to_one",
-    )
-    convergence_summary = pd.DataFrame([
-        {
-            "support_layer": layer,
-            "n_evaluable_associations": len(maf1_convergence),
-            "n_supported": int(maf1_convergence[column].astype(bool).sum()),
-            "support_fraction": float(maf1_convergence[column].astype(bool).mean()),
-        }
-        for layer, column in [
-            ("overall", "overall_sig"),
-            ("functional", "functional_sig"),
-            ("intronic", "intronic_sig"),
-        ]
-    ])
     feature_comparison = recurrent_feature_comparison(lead_summary)
 
     driver_counts = associations["driver_class"].value_counts()
@@ -595,7 +572,6 @@ def main() -> None:
         "step32_trait_category_enrichment.csv": category_tests,
         "step32_family_category_enrichment.csv": family_tests,
         "step32_recurrent_feature_comparison.csv": feature_comparison,
-        "step32_rare_snv_convergence_descriptive.csv": convergence_summary,
         "step32_primary_comparison.csv": comparison,
         "step32_qc.csv": qc,
     }
