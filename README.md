@@ -2,9 +2,30 @@
 
 Analysis code for *Gene-level analysis of structural variants reveals a lead-variant-centered signal architecture and phenotype-structured recurrence*.
 
-## Environment and inputs
+## Set up the environment
 
-Use Python 3.14 with [`requirements.txt`](requirements.txt). The input association summary statistics are available from their original providers: [SV results from deCODE](https://www.decode.com/summarydata/) (the UK Biobank Whole-Genome Sequencing Consortium entry) and [single-variant results from the GWAS Catalog](https://www.ebi.ac.uk/gwas/downloads/summary-statistics). Use the [GENCODE v49 basic GRCh38 GTF](https://www.gencodegenes.org/human/release_49.html) for gene annotation. The exact trait-to-GCST mapping is in [`scripts/06_snv_acat.py`](scripts/06_snv_acat.py); [`metadata/traits.tsv`](metadata/traits.tsv) records the analyzed traits and phenotype groupings. Download the source files from those providers and arrange them as described in [`examples/input_schema.md`](examples/input_schema.md). Neither source summary statistics nor generated results are redistributed here.
+From the repository directory, create a Python 3.14 virtual environment and install the pinned packages in [`requirements.txt`](requirements.txt):
+
+```bash
+python3.14 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Run the analysis commands below with this environment active. Use `deactivate` when finished. The `.venv/` directory is ignored by Git.
+
+## Inputs
+
+Download these inputs from their original providers:
+
+| Input | Source | Expected location |
+| --- | --- | --- |
+| UK Biobank WGS SV association summary statistics | [deCODE summary data](https://www.decode.com/summarydata/) — UK Biobank Whole-Genome Sequencing Consortium entry | `<DATA_ROOT>/SV_association/NFE/qtbig.A/` |
+| Phenotype-matched single-variant summary statistics | [GWAS Catalog](https://www.ebi.ac.uk/gwas/downloads/summary-statistics); exact trait-to-GCST IDs in [`scripts/06_snv_acat.py`](scripts/06_snv_acat.py) | `<GWAS_DIR>/<SOURCE>/<GCST_ID>.tsv.gz` |
+| GENCODE v49 basic gene annotation (GRCh38) | [GENCODE human release 49](https://www.gencodegenes.org/human/release_49.html) | `<DATA_ROOT>/Gene_ref/gencode.v49.basic.annotation.gtf.gz` |
+
+[`metadata/traits.tsv`](metadata/traits.tsv) records the analyzed traits and phenotype groupings. See [`examples/input_schema.md`](examples/input_schema.md) for filenames and required columns. Neither source summary statistics nor generated results are redistributed here.
 
 Most scripts take `--project-root <DATA_ROOT>`; the rare-SNV batch script takes explicit input, output, and scratch paths. Keep downloaded inputs and generated outputs outside this repository.
 
