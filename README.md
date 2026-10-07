@@ -60,7 +60,22 @@ Run the numbered scripts in order. Step 1 takes explicit `--gtf` and `--out` pat
 | 5 | `05_sv_features.py` | Compare recurrent-SV features. |
 | 6 | `06_maf1_sensitivity.py` | Repeat key SV analyses at MAF <1%. |
 
-From the repository directory with the Conda environment active, set the data directory once. Run each step in the same terminal, in order.
+From the repository directory with the Conda environment active, replace `/path/to/data` with the directory containing the downloaded inputs. To run all steps:
+
+```bash
+(
+  set -e
+  data_root=/path/to/data
+  python scripts/01_reference.py --gtf "$data_root/Gene_ref/gencode.v49.basic.annotation.gtf.gz" --out "$data_root/results/gene_table.parquet"
+  python scripts/02_sv_acat.py --project-root "$data_root"
+  python scripts/03_lead_architecture.py --project-root "$data_root"
+  python scripts/04_recurrence.py --project-root "$data_root"
+  python scripts/05_sv_features.py --project-root "$data_root"
+  python scripts/06_maf1_sensitivity.py --project-root "$data_root"
+)
+```
+
+To run one step at a time, set the data directory once and copy each step below in the same terminal:
 
 ```bash
 data_root=/path/to/data
