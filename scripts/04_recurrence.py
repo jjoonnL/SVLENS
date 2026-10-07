@@ -106,7 +106,7 @@ def _stage_qc(args):
         master.groupby("lead_sv_id")["trait"].nunique().loc[lambda x: x.ge(2)].index
     )
     hits = master.loc[master["lead_sv_id"].isin(recurrent_all)]
-    raw = scan_raw_leads(hits, root / "SV_association/NFE/qtbig.A")
+    raw = scan_raw_leads(hits, root / "SV_association")
     qc = assign_qc_caution(hits, raw)
     qc.to_csv(output / "recurrent_lead_sv_case_priority.csv", index=False)
     lead_path = output / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv"

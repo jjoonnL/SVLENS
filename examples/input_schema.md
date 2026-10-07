@@ -5,7 +5,7 @@ Download the source data listed in the [README](../README.md#required-inputs). K
 ```text
 <DATA_ROOT>/
 ├── Gene_ref/gencode.v49.basic.annotation.gtf.gz
-└── SV_association/NFE/qtbig.A/<TRAIT>_adjAgeSexYobPC_InvNorm.txt.gz
+└── SV_association/<TRAIT>_adjAgeSexYobPC_InvNorm.txt.gz
 ```
 
 `<TRAIT>` names are listed in [`metadata/traits.tsv`](../metadata/traits.tsv).

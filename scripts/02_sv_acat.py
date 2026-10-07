@@ -32,7 +32,7 @@ SUMSTATS_SUFFIX = "_adjAgeSexYobPC_InvNorm"
 def set_project_root(root):
     global BASE, ASSOC_DIR, SHARED_DIR, GENE_TABLE, GTF_PATH
     BASE = Path(root).expanduser().resolve()
-    ASSOC_DIR = BASE / "SV_association/NFE/qtbig.A"
+    ASSOC_DIR = BASE / "SV_association"
     SHARED_DIR = BASE / "results"
     GENE_TABLE = SHARED_DIR / "gene_table.parquet"
     GTF_PATH = BASE / "Gene_ref/gencode.v49.basic.annotation.gtf.gz"

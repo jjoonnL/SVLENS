@@ -43,10 +43,10 @@ Download the source data separately. They are not included in this repository.
 
 | Input | Provider | Expected location |
 | --- | --- | --- |
-| UK Biobank WGS SV association summary statistics | [deCODE](https://www.decode.com/summarydata/) — UK Biobank Whole-Genome Sequencing Consortium entry | `<DATA_ROOT>/SV_association/NFE/qtbig.A/` |
+| UK Biobank WGS SV association summary statistics | [deCODE](https://www.decode.com/summarydata/) — UK Biobank Whole-Genome Sequencing Consortium entry | `<DATA_ROOT>/SV_association/` |
 | GENCODE v49 basic GTF (GRCh38) | [GENCODE release 49](https://www.gencodegenes.org/human/release_49.html) | `<DATA_ROOT>/Gene_ref/gencode.v49.basic.annotation.gtf.gz` |
 
-The analyzed traits and phenotype groupings are in [`metadata/traits.tsv`](metadata/traits.tsv). See [`examples/input_schema.md`](examples/input_schema.md) for filenames, columns, and coordinate conventions. Keep input data and generated results outside this repository.
+Place the NFE quantitative-trait `.txt.gz` files directly in `SV_association/`, retaining their original filenames. The analyzed traits and phenotype groupings are in [`metadata/traits.tsv`](metadata/traits.tsv). See [`examples/input_schema.md`](examples/input_schema.md) for filenames, columns, and coordinate conventions. Keep input data and generated results outside this repository.
 
 ## Run the analysis
 
