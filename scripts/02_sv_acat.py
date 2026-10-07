@@ -1,15 +1,15 @@
 """
 NFE Quantitative Traits Pipeline
-Steps 2 (sv_annotation) + 3 (weight_acat) 일괄 실행
+Run Steps 2 (sv_annotation) and 3 (weight_acat) across traits
 
 Usage:
     python scripts/02_sv_acat.py --project-root /path/to/private-data-root
     python scripts/02_sv_acat.py --project-root /path/to/private-data-root --step3-only
 
 Options:
-    --skip-done   : 이미 완료된 trait 건너뜀 (기본값: True)
-    --step2-only  : Step 2만 실행
-    --step3-only  : Step 3만 실행 (sv_annotated.parquet 있어야 함)
+    --skip-done   : Skip traits with existing outputs (default: True)
+    --step2-only  : Run only Step 2
+    --step3-only  : Run only Step 3 (requires sv_annotated.parquet)
 """
 
 import os, sys, re, time, argparse
@@ -22,13 +22,13 @@ from statsmodels.stats.multitest import multipletests
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from acat import run_acat_gene, SV_TYPES
 
-# ── 경로 설정 ─────────────────────────────────────────────────────────────────
+# ── Paths ────────────────────────────────────────────────────────────────────
 BASE = ASSOC_DIR = SHARED_DIR = GENE_TABLE = GTF_PATH = None
 MAF_THRESHOLD = 0.05
 PROMOTER_WIN  = 2000
 SUMSTATS_SUFFIX = "_adjAgeSexYobPC_InvNorm"
 
-# ── Trait 목록 ────────────────────────────────────────────────────────────────
+# ── Traits ───────────────────────────────────────────────────────────────────
 def set_project_root(root):
     global BASE, ASSOC_DIR, SHARED_DIR, GENE_TABLE, GTF_PATH
     BASE = Path(root).expanduser().resolve()
@@ -48,7 +48,7 @@ def load_gene_table():
 
 
 def load_feat_track():
-    """GTF에서 CDS/UTR feature 좌표 로드 (공유 자원, 1회만 로드)."""
+    """Load CDS/UTR coordinates from the GTF once for all traits."""
     GTF_COLS     = ["chrom","source","feature","start","end","score","strand","frame","attributes"]
     TARGET_FEATS = {"CDS", "UTR"}
     chunks = []
@@ -110,16 +110,16 @@ def run_step2(trait_name, gene_table, feat_track):
     out_path      = f"{output_dir}/sv_annotated.parquet"
     os.makedirs(output_dir, exist_ok=True)
 
-    # 로드
+    # Load summary statistics
     raw = pd.read_csv(sumstats_path, sep="\t", low_memory=False)
 
-    # SV type/size 파싱
+    # Parse SV type and size
     parsed = raw["effectAllele"].apply(parse_sv_allele)
     raw["sv_type"] = [p[0] for p in parsed]
     raw["svsize"]  = [p[1] for p in parsed]
     raw = raw.dropna(subset=["sv_type"]).copy()
 
-    # 컬럼 정리
+    # Standardize columns
     sv = raw.rename(columns={"Chrom": "chrom", "Pos": "pos"}).copy()
     sv["chrom"] = sv["chrom"].astype(str).apply(lambda x: x if x.startswith("chr") else "chr" + x)
     sv["maf"]   = sv["effectAlleleFreq"].clip(0, 1)
@@ -130,7 +130,7 @@ def run_step2(trait_name, gene_table, feat_track):
     sv["info"]  = sv.get("info", np.nan)
     sv["pval"]  = sv["pval"].clip(lower=0)
 
-    # SV 좌표 (0-based half-open)
+    # SV coordinates (0-based half-open)
     sv["sv_start"] = sv["pos"].astype(int) - 1
     sv["sv_end"]   = sv["sv_start"] + sv["svsize"]
     sv["sv_id"]    = sv["Name"].astype(str)
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip-done",   action="store_true", default=True)
     parser.add_argument("--step2-only",  action="store_true")
     parser.add_argument("--step3-only",  action="store_true")
-    parser.add_argument("--traits",      nargs="+", help="특정 trait만 실행")
+    parser.add_argument("--traits",      nargs="+", help="Run only the specified traits")
     args = parser.parse_args()
 
     set_project_root(args.project_root)
@@ -254,12 +254,12 @@ if __name__ == "__main__":
 
     traits = args.traits if args.traits else all_traits
 
-    # 공유 자원 로드 (Step 2 필요 시)
+    # Load shared resources when Step 2 is needed
     gene_table = feat_track = None
     if not args.step3_only:
         print("Loading gene table...")
         gene_table = load_gene_table()
-        print("Loading GTF feature track (CDS/UTR)... (수 분 소요)")
+        print("Loading GTF feature track (CDS/UTR)... this may take several minutes")
         feat_track = load_feat_track()
         print(f"GTF features loaded: {len(feat_track):,}")
 
