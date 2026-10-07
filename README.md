@@ -61,6 +61,18 @@ Run the numbered scripts in order. Step 1 takes explicit `--gtf` and `--out` pat
 | 5 | `05_sv_features.py` | Compare recurrent-SV features. |
 | 6 | `06_maf1_sensitivity.py` | Repeat key SV analyses at MAF <1%. |
 
-Use `<DATA_ROOT>/results/gene_table.parquet` as the output for step 1. Steps 2–6 write under `<DATA_ROOT>/results/`. The [provenance map](docs/provenance.md) lists principal outputs and their manuscript figure/table connections. Figure layout and Supplementary Table formatting are not part of this code release.
+From the repository directory with the Conda environment active, replace `/path/to/data` with the directory containing the downloaded inputs and run:
+
+```bash
+data_root=/path/to/data
+python scripts/01_reference.py --gtf "$data_root/Gene_ref/gencode.v49.basic.annotation.gtf.gz" --out "$data_root/results/gene_table.parquet"
+python scripts/02_sv_acat.py --project-root "$data_root"
+python scripts/03_lead_architecture.py --project-root "$data_root"
+python scripts/04_recurrence.py --project-root "$data_root"
+python scripts/05_sv_features.py --project-root "$data_root"
+python scripts/06_maf1_sensitivity.py --project-root "$data_root"
+```
+
+Steps 2–6 write under `<DATA_ROOT>/results/`. The [provenance map](docs/provenance.md) lists principal outputs and their manuscript figure/table connections. Figure layout and Supplementary Table formatting are not part of this code release.
 
 The complete pipeline has not been rerun from this distribution copy. No source summary statistics or generated results are redistributed here.
