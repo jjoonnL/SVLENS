@@ -1,0 +1,52 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Raw or large genetic data
+data/
+raw/
+external/
+SV_association/
+GWAS_summary/
+Gene_ref/
+results_server/
+*.vcf
+*.vcf.gz
+*.bcf
+*.bgen
+*.bed
+*.bim
+*.fam
+*.pgen
+*.pvar
+*.psam
+*.parquet
+*.txt.gz
+*.tsv.gz
+*.csv.gz
+
+# Generated and access-controlled outputs are not part of the code release.
+results/**
+tables/**/*.csv
+tables/**/*.xlsx
+figures/
+
+# Private local config
+*.local.env
+config/paths.yaml
