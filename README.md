@@ -39,7 +39,7 @@ sv-association-architecture/
 
 ## Required inputs
 
-Download the source data separately; they are not included in this repository.
+Download the source data separately. They are not included in this repository.
 
 | Input | Provider | Expected location |
 | --- | --- | --- |
@@ -50,7 +50,7 @@ The analyzed traits and phenotype groupings are in [`metadata/traits.tsv`](metad
 
 ## Run the analysis
 
-Run the numbered scripts in order. Step 1 takes explicit `--gtf` and `--out` paths; steps 2–6 take `--project-root <DATA_ROOT>`. Use `--help` for other options.
+Run the numbered scripts in order. Step 1 takes explicit `--gtf` and `--out` paths. Steps 2–6 take `--project-root <DATA_ROOT>`. Use `--help` for other options.
 
 | Step | Script | Purpose |
 | --- | --- | --- |
