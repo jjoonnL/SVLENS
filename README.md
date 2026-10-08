@@ -26,8 +26,8 @@ SVLENS/
 2. Create and activate a Conda environment (recommended):
 
    ```bash
-   conda create -n svassoc python=3.14 pip -y
-   conda activate svassoc
+   conda create -n svlens python=3.14 pip -y
+   conda activate svlens
    ```
 
 3. Install the dependencies:
