@@ -2,6 +2,7 @@
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -86,6 +87,50 @@ class CoreMethodTests(unittest.TestCase):
         self.assertEqual(table["gene_end"].tolist(), [200, 450])
         self.assertEqual(table["tss"].tolist(), [100, 450])
         self.assertTrue(np.all(table["promoter_start"].to_numpy() >= 0))
+
+    def test_insertion_anchor_and_effect_columns(self):
+        module = load_script("02_sv_acat.py")
+        raw = pd.DataFrame({
+            "Name": ["ins_left", "ins_right", "del_span"],
+            "Chrom": ["1", "1", "1"],
+            "Pos": [101, 102, 100],
+            "effectAllele": [
+                "<INS:SVSIZE=50:TEST>", "<INS:SVSIZE=50:TEST>",
+                "<DEL:SVSIZE=3:TEST>",
+            ],
+            "effectAlleleFreq": [0.01, 0.02, 0.03],
+            "Beta": [0.1, 0.2, 0.3],
+            "SE": [0.01, 0.02, 0.03],
+            "N": [100, 200, 300],
+            "pval": [0.1, 0.2, 0.3],
+        })
+        genes = pd.DataFrame({
+            "chrom": ["chr1", "chr1"],
+            "gene_id": ["left", "right"],
+            "gene_name": ["LEFT", "RIGHT"],
+            "tss": [100, 101],
+            "promoter_start": [100, 101],
+            "promoter_end": [101, 102],
+            "gene_start": [100, 101],
+            "gene_end": [101, 110],
+        })
+        features = pd.DataFrame(columns=[
+            "chrom", "gene_id", "feat_type", "feat_start", "feat_end",
+        ])
+        saved = []
+        with tempfile.TemporaryDirectory() as tmp:
+            module.set_project_root(tmp)
+            with patch.object(module.pd, "read_csv", return_value=raw):
+                with patch.object(pd.DataFrame, "to_parquet", lambda frame, *args, **kwargs: saved.append(frame.copy())):
+                    self.assertTrue(module.run_step2("synthetic", genes, features))
+        annotated = saved[0].set_index(["sv_id", "gene_id"])
+        self.assertEqual(set(annotated.index), {
+            ("ins_left", "left"), ("ins_right", "right"),
+            ("del_span", "left"), ("del_span", "right"),
+        })
+        self.assertEqual(int(annotated.loc[("ins_left", "left"), "sv_end"]), 101)
+        self.assertEqual(int(annotated.loc[("del_span", "right"), "sv_end"]), 102)
+        self.assertEqual(annotated.loc[("ins_left", "left"), ["Beta", "SE", "N"]].tolist(), [0.1, 0.01, 100])
 
     def test_merged_stage_order(self):
         cases = [

@@ -14,4 +14,4 @@ Download the source data listed in the [README](../README.md#required-inputs). K
 
 - SV summary statistics (`.txt.gz`): `Chrom`, `Pos`, `Name`, `effectAllele`, `effectAlleleFreq`, `pval`, `Beta`, `SE`, `N`, `info`.
 
-`Pos` is 1-based. SV `Name` must retain its original identifier for exact-variant recurrence. The scripts convert positions to 0-based coordinates for GENCODE gene-body membership. Promoter, CDS, and UTR annotations do not extend that membership window.
+`Pos` is 1-based. SV `Name` must retain its original identifier for exact-variant recurrence. The scripts convert positions to 0-based coordinates for GENCODE gene-body membership. Insertions use the 1-bp reference anchor, while deletions and duplications use the reported `SVSIZE` as their reference span. Promoter, CDS, and UTR annotations do not extend the gene-body membership window.

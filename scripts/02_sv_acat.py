@@ -124,15 +124,12 @@ def run_step2(trait_name, gene_table, feat_track):
     sv["chrom"] = sv["chrom"].astype(str).apply(lambda x: x if x.startswith("chr") else "chr" + x)
     sv["maf"]   = sv["effectAlleleFreq"].clip(0, 1)
     sv["maf"]   = sv["maf"].apply(lambda x: min(x, 1 - x))
-    sv["Beta"]  = sv["beta"] if "beta" in sv.columns else sv.get("oddsRatio", np.nan)
-    sv["SE"]    = sv.get("se", np.nan)
-    sv["N"]     = sv.get("n", np.nan)
     sv["info"]  = sv.get("info", np.nan)
     sv["pval"]  = sv["pval"].clip(lower=0)
 
-    # SV coordinates (0-based half-open)
+    # SV coordinates: 0-based half-open, INS uses a 1-bp reference anchor
     sv["sv_start"] = sv["pos"].astype(int) - 1
-    sv["sv_end"]   = sv["sv_start"] + sv["svsize"]
+    sv["sv_end"]   = sv["sv_start"] + np.where(sv["sv_type"].eq("INS"), 1, sv["svsize"])
     sv["sv_id"]    = sv["Name"].astype(str)
 
     sv = sv[["sv_id","chrom","sv_start","sv_end","sv_type","svsize",
