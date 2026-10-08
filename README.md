@@ -119,4 +119,13 @@ Step 6:
 python scripts/06_maf1_sensitivity.py --project-root "$data_root"
 ```
 
-Steps 2–6 write under `<DATA_ROOT>/results/`.
+## Outputs
+
+All files are written under `<DATA_ROOT>/results/`. Key outputs are:
+
+- Step 1: `gene_table.parquet` contains GENCODE gene coordinates and annotations.
+- Step 2: `<TRAIT>/sv_annotated.parquet` contains SV–gene overlaps, while `<TRAIT>/sv_weighted.parquet` and `<TRAIT>/acat_gene.parquet` contain the filtered SVs and gene-level ACAT results. The script also writes SV-type and functional/intronic ACAT tables for each trait.
+- Step 3: `sv_pleiotropy/sv_pleiotropy_master.non_ratio_primary.csv` contains significant primary gene–trait associations. `sv_pleiotropy/driver_decomposition/` contains lead-removal classes, and `sv_pleiotropy/lead_criticality_locality_audit/` contains random-removal and conditional residual-SV results.
+- Step 4: `sv_pleiotropy/lead_sv_level_pleiotropy_summary.non_ratio_primary.csv` contains exact lead-SV recurrence. `sv_pleiotropy/category_enrichment/` contains phenotype-category results, and the target/origin audit folders contain locus QC tables.
+- Step 5: `sv_pleiotropy/recurrent_feature_architecture/` contains recurrent-SV feature comparisons, sensitivity analyses, and model outputs.
+- Step 6: `sv_pleiotropy/maf1_sensitivity/` contains the MAF <1% associations, comparisons with the primary analysis, and QC.
