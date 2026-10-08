@@ -121,11 +121,22 @@ python scripts/06_maf1_sensitivity.py --project-root "$data_root"
 
 ## Outputs
 
-All files are written under `<DATA_ROOT>/results/`. Key outputs are:
+All files are written under `<DATA_ROOT>/results/`:
 
-- Step 1: `gene_table.parquet` contains GENCODE gene coordinates and annotations.
-- Step 2: `<TRAIT>/sv_annotated.parquet` contains SV–gene overlaps, while `<TRAIT>/sv_weighted.parquet` and `<TRAIT>/acat_gene.parquet` contain the filtered SVs and gene-level ACAT results. The script also writes SV-type and functional/intronic ACAT tables for each trait.
-- Step 3: `sv_pleiotropy/sv_pleiotropy_master.non_ratio_primary.csv` contains significant primary gene–trait associations. `sv_pleiotropy/driver_decomposition/` contains lead-removal classes, and `sv_pleiotropy/lead_criticality_locality_audit/` contains random-removal and conditional residual-SV results.
-- Step 4: `sv_pleiotropy/lead_sv_level_pleiotropy_summary.non_ratio_primary.csv` contains exact lead-SV recurrence. `sv_pleiotropy/category_enrichment/` contains phenotype-category results, and the target/origin audit folders contain locus QC tables.
-- Step 5: `sv_pleiotropy/recurrent_feature_architecture/` contains recurrent-SV feature comparisons, sensitivity analyses, and model outputs.
-- Step 6: `sv_pleiotropy/maf1_sensitivity/` contains the MAF <1% associations, comparisons with the primary analysis, and QC.
+```text
+results/
+├── gene_table.parquet                 # Step 1: GENCODE gene reference
+├── traits/<TRAIT>/                   # Step 2: SV–gene pairs and gene-level ACAT
+└── combined/                         # Steps 3–6: analyses across traits
+    ├── gene_trait_associations.csv   # Primary, non-ratio associations
+    ├── lead_sv_summary.csv            # Exact lead-SV recurrence
+    ├── recurrent_lead_svs.csv         # Lead SVs associated with ≥2 traits
+    ├── lead_removal/                  # Lead-removal classification
+    ├── lead_sv_audit/                 # Random removal and residual-SV analyses
+    ├── category_enrichment/          # Phenotype-category enrichment
+    ├── locus_audit/                  # Gene assignment and origin flags
+    ├── sv_features/                  # Recurrent-SV feature comparisons
+    └── maf1_sensitivity/             # MAF <1% analysis
+```
+
+Each `traits/<TRAIT>/` folder contains `sv_annotated.parquet`, `sv_weighted.parquet`, and `acat_gene.parquet`, plus SV-type and functional/intronic ACAT results. The combined folder also contains `gene_trait_associations_all_traits.csv`, which includes the ratio traits excluded from the primary analysis.

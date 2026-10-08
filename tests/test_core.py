@@ -32,6 +32,30 @@ def load_script(name):
 
 
 class CoreMethodTests(unittest.TestCase):
+    def test_output_layout(self):
+        module = load_script("02_sv_acat.py")
+        data_root = ROOT / "synthetic_data_root"
+        module.set_project_root(data_root)
+        self.assertEqual(module.TRAITS_DIR, data_root / "results" / "traits")
+        self.assertEqual(module.GENE_TABLE, data_root / "results" / "gene_table.parquet")
+
+    def test_residual_sv_summary_retains_null_interval(self):
+        module = load_script("03_lead_architecture.py")
+        module.N_PERMUTATIONS = 1_000
+        locality = pd.DataFrame([{
+            "candidate_distances_bp": "0; 100000",
+            "candidate_same_type": "1; 0",
+            "observed_distance_bp": 0,
+            "observed_overlap": 1,
+            "observed_within_50kb": 1,
+            "observed_within_250kb": 1,
+            "observed_same_type": 1,
+            "observed_same_type_within_50kb": 1,
+        }])
+        summary, _ = module.locality_permutation(locality, np.random.default_rng(1))
+        self.assertTrue((summary["null_95pct_low"] <= summary["null_mean"]).all())
+        self.assertTrue((summary["null_mean"] <= summary["null_95pct_high"]).all())
+
     def test_sv_type_stratified_acat(self):
         variants = pd.DataFrame({
             "gene_id": ["G1", "G1", "G1"],

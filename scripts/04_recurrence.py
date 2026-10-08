@@ -100,23 +100,22 @@ def assign_qc_caution(master, raw_records):
 
 def _stage_qc(args):
     root = args.project_root.expanduser().resolve()
-    output = root / "results/sv_pleiotropy"
-    master = pd.read_csv(output / "sv_pleiotropy_master.csv")
+    output = root / "results/combined"
+    master = pd.read_csv(output / "gene_trait_associations_all_traits.csv")
     recurrent_all = set(
         master.groupby("lead_sv_id")["trait"].nunique().loc[lambda x: x.ge(2)].index
     )
     hits = master.loc[master["lead_sv_id"].isin(recurrent_all)]
     raw = scan_raw_leads(hits, root / "SV_association")
     qc = assign_qc_caution(hits, raw)
-    qc.to_csv(output / "recurrent_lead_sv_case_priority.csv", index=False)
-    lead_path = output / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv"
+    qc_dir = output / "locus_audit"
+    qc_dir.mkdir(parents=True, exist_ok=True)
+    qc.to_csv(qc_dir / "lead_sv_qc.csv", index=False)
+    lead_path = output / "lead_sv_summary.csv"
     lead = pd.read_csv(lead_path)
     fields = ["lead_sv_id", "case_tier", "qc_caution_reason", "median_approx_mac", "min_approx_mac", "min_info"]
     lead = lead.merge(qc[fields], on="lead_sv_id", how="left", validate="one_to_one")
     lead.to_csv(lead_path, index=False)
-    lead.loc[lead["is_recurrent_non_ratio"].astype(bool)].to_csv(
-        output / "candidate_recurrent_lead_svs.non_ratio_primary.csv", index=False
-    )
     print(f"{int(qc['case_tier'].eq('QC_caution').sum())} QC-caution lead SVs")
 
 
@@ -331,11 +330,11 @@ def run(master, metadata, n_permutations=N_PERMUTATIONS):
 
 
 def _stage_enrichment(args):
-    base = args.project_root / "results/sv_pleiotropy"
-    master = pd.read_csv(base / "sv_pleiotropy_master.csv")
+    base = args.project_root / "results/combined"
+    master = pd.read_csv(base / "gene_trait_associations_all_traits.csv")
     metadata = pd.read_csv(args.traits, sep="\t")
-    module, pairs, traits = run(master, metadata)
-    recurrence_path = base / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv"
+    module, pairs, _ = run(master, metadata)
+    recurrence_path = base / "lead_sv_summary.csv"
     recurrence = pd.read_csv(recurrence_path)
     individual_module = module.loc[module["scenario"].eq("no_ratio")].copy()
     module_columns = [
@@ -350,27 +349,19 @@ def _stage_enrichment(args):
     )
     recurrence.to_csv(recurrence_path, index=False)
     recurrence.loc[recurrence["is_recurrent_non_ratio"]].to_csv(
-        base / "candidate_recurrent_lead_svs.non_ratio_primary.csv", index=False
+        base / "recurrent_lead_svs.csv", index=False
     )
     output = base / "category_enrichment"
     output.mkdir(parents=True, exist_ok=True)
-    module.to_csv(base / "lead_sv_redundancy_sensitivity.csv", index=False)
-    pairs.to_csv(output / "recurrent_lead_sv_category_enrichment_sensitivity.csv", index=False)
+    module.to_csv(output / "recurrence_family_sensitivity.csv", index=False)
+    pairs.to_csv(output / "category_enrichment_sensitivity.csv", index=False)
     individual_pairs = pairs.loc[pairs["scenario"].eq("no_ratio")].copy()
     assignment = category_assignment(individual_pairs, recurrence)
     individual_pairs.rename(columns={
         "n_units": "n_traits_non_ratio", "background_category_count": "background_trait_count",
         "background_total_units": "background_total_traits",
-    }).to_csv(output / "recurrent_lead_sv_category_enrichment.csv", index=False)
-    assignment.to_csv(output / "recurrent_lead_sv_category_assignment.csv", index=False)
-    phenotype = traits.rename(columns={
-        "trait_category": "trait_category", "family": "collapsed_family",
-        "is_ratio": "is_ratio_trait",
-    })
-    phenotype["used_in_non_ratio_primary"] = ~phenotype["is_ratio_trait"]
-    phenotype_dir = base / "phenotype_grouping"
-    phenotype_dir.mkdir(parents=True, exist_ok=True)
-    phenotype.to_csv(phenotype_dir / "phenotype_family_mapping.csv", index=False)
+    }).to_csv(output / "trait_category_enrichment.csv", index=False)
+    assignment.to_csv(output / "category_assignment.csv", index=False)
     print(f"{len(module)} module rows and {len(pairs)} category-pair rows")
 
 
@@ -532,31 +523,26 @@ def exclusion_sensitivity(master, target, origin, category_pairs):
 
 
 def _stage_locus_audit(args):
-    base = args.project_root / "results/sv_pleiotropy"
-    master = pd.read_csv(base / "sv_pleiotropy_master.non_ratio_primary.csv")
-    lead = pd.read_csv(base / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv")
+    base = args.project_root / "results/combined"
+    master = pd.read_csv(base / "gene_trait_associations.csv")
+    lead = pd.read_csv(base / "lead_sv_summary.csv")
     assignment = pd.read_csv(
-        base / "category_enrichment/recurrent_lead_sv_category_assignment.csv"
+        base / "category_enrichment/category_assignment.csv"
     )
     category_pairs = pd.read_csv(
-        base / "category_enrichment/recurrent_lead_sv_category_enrichment.csv"
+        base / "category_enrichment/trait_category_enrichment.csv"
     )
     target = target_assignment(master)
     origin = origin_audit(lead, assignment)
     filtered_pairs, sensitivity = exclusion_sensitivity(master, target, origin, category_pairs)
-    target_out = base / "target_ambiguity"
-    origin_out = base / "somatic_immune_audit"
-    target_out.mkdir(parents=True, exist_ok=True)
-    origin_out.mkdir(parents=True, exist_ok=True)
-    target.to_csv(target_out / "lead_sv_target_ambiguity.all_non_ratio.csv", index=False)
-    target.loc[target["is_recurrent"]].to_csv(
-        target_out / "recurrent_lead_sv_target_ambiguity.csv", index=False
-    )
-    origin.to_csv(origin_out / "lead_sv_origin_audit.csv", index=False)
+    audit_out = base / "locus_audit"
+    audit_out.mkdir(parents=True, exist_ok=True)
+    target.to_csv(audit_out / "lead_sv_gene_assignment.csv", index=False)
+    origin.to_csv(audit_out / "lead_sv_origin_audit.csv", index=False)
     filtered_pairs.to_csv(
-        origin_out / "category_enrichment_excluding_blood_derived_candidates.csv", index=False
+        audit_out / "category_enrichment_excluding_blood_derived_candidates.csv", index=False
     )
-    sensitivity.to_csv(origin_out / "core_architecture_exclusion_sensitivity.csv", index=False)
+    sensitivity.to_csv(audit_out / "core_architecture_exclusion_sensitivity.csv", index=False)
     print(f"{len(target)} target rows; {int(origin['blood_derived_candidate'].sum())} flagged lead SVs")
 
 

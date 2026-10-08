@@ -143,19 +143,9 @@ def annotation_layer(row: pd.Series) -> str:
 
 
 def trait_family_map() -> dict[str, str]:
-    path = PRIMARY_DIR / "phenotype_grouping/phenotype_family_mapping.csv"
-    mapping = pd.read_csv(path)
-    result = dict(zip(mapping["trait"], mapping["collapsed_family"]))
-    # These six traits were absent from the historical exported mapping.
-    result.update({
-        "C_reactive_protein": "C_reactive_protein",
-        "Oestradiol": "Oestradiol",
-        "Rheumatoid_factor": "Rheumatoid_factor",
-        "Testosterone": "Testosterone",
-        "Waist_circumference": "Waist_circumference",
-        "Waist_hip_ratio": "Ratio_Waist_hip_ratio",
-    })
-    return result
+    path = Path(__file__).resolve().parents[1] / "metadata/traits.tsv"
+    mapping = pd.read_csv(path, sep="\t")
+    return dict(zip(mapping["trait"], mapping["family"]))
 
 
 def analyze_trait(path: Path) -> tuple[pd.DataFrame, dict[str, object]]:
@@ -358,10 +348,10 @@ def main() -> None:
     global PROJECT_ROOT, RESULTS_DIR, PRIMARY_DIR, OUT_DIR
     PROJECT_ROOT = args.project_root.expanduser().resolve()
     RESULTS_DIR = PROJECT_ROOT / "results"
-    PRIMARY_DIR = RESULTS_DIR / "sv_pleiotropy"
+    PRIMARY_DIR = RESULTS_DIR / "combined"
     OUT_DIR = PRIMARY_DIR / "maf1_sensitivity"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    trait_paths = sorted(RESULTS_DIR.glob("*/sv_weighted.parquet"))
+    trait_paths = sorted((RESULTS_DIR / "traits").glob("*/sv_weighted.parquet"))
     trait_paths = [p for p in trait_paths if p.parent.name not in RATIO_TRAITS]
     if len(trait_paths) != 72:
         raise ValueError(f"Expected 72 non-ratio trait tables, found {len(trait_paths)}")
@@ -448,13 +438,13 @@ def main() -> None:
         lead_summary[column] = lead_summary[column].eq(True)
 
     primary_associations = pd.read_csv(
-        PRIMARY_DIR / "sv_pleiotropy_master.non_ratio_primary.csv"
+        PRIMARY_DIR / "gene_trait_associations.csv"
     )
     primary_leads = pd.read_csv(
-        PRIMARY_DIR / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv"
+        PRIMARY_DIR / "lead_sv_summary.csv"
     )
     primary_category = pd.read_csv(
-        PRIMARY_DIR / "category_enrichment/recurrent_lead_sv_category_assignment.csv"
+        PRIMARY_DIR / "category_enrichment/category_assignment.csv"
     )
 
     primary_lead_trait = primary_associations[
@@ -566,14 +556,14 @@ def main() -> None:
     ])
 
     outputs = {
-        "step32_trait_summary.csv": trait_summary,
-        "step32_maf1_gene_trait_associations.csv": associations,
-        "step32_maf1_lead_sv_summary.csv": lead_summary,
-        "step32_trait_category_enrichment.csv": category_tests,
-        "step32_family_category_enrichment.csv": family_tests,
-        "step32_recurrent_feature_comparison.csv": feature_comparison,
-        "step32_primary_comparison.csv": comparison,
-        "step32_qc.csv": qc,
+        "trait_summary.csv": trait_summary,
+        "gene_trait_associations.csv": associations,
+        "lead_sv_summary.csv": lead_summary,
+        "trait_category_enrichment.csv": category_tests,
+        "family_category_enrichment.csv": family_tests,
+        "recurrent_feature_comparison.csv": feature_comparison,
+        "primary_comparison.csv": comparison,
+        "qc.csv": qc,
     }
     for filename, table in outputs.items():
         table.to_csv(OUT_DIR / filename, index=False)

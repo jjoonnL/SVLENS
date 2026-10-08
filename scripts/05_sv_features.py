@@ -17,17 +17,17 @@ def main():
 
     PROJECT_ROOT = args.project_root.expanduser().resolve()
 
-    RESULT_DIR = PROJECT_ROOT / "results" / "sv_pleiotropy"
-    OUT_DIR = RESULT_DIR / "recurrent_feature_architecture"
+    RESULT_DIR = PROJECT_ROOT / "results" / "combined"
+    OUT_DIR = RESULT_DIR / "sv_features"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     paths = {
-        "lead": RESULT_DIR / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv",
-        "recurrent": RESULT_DIR / "candidate_recurrent_lead_svs.non_ratio_primary.csv",
+        "lead": RESULT_DIR / "lead_sv_summary.csv",
+        "recurrent": RESULT_DIR / "recurrent_lead_svs.csv",
         "category_assignment": (
-            RESULT_DIR / "category_enrichment" / "recurrent_lead_sv_category_assignment.csv"
+            RESULT_DIR / "category_enrichment" / "category_assignment.csv"
         ),
-        "origin_audit": RESULT_DIR / "somatic_immune_audit" / "lead_sv_origin_audit.csv",
+        "origin_audit": RESULT_DIR / "locus_audit" / "lead_sv_origin_audit.csv",
     }
 
     missing_paths = [path for path in paths.values() if not path.exists()]

@@ -71,7 +71,7 @@ def read_significant_trait(trait_dir, category):
 def build_master(results_dir, metadata):
     category = metadata.set_index("trait")["category"].to_dict()
     trait_dirs = sorted(
-        path for path in results_dir.iterdir()
+        path for path in (results_dir / "traits").iterdir()
         if path.is_dir() and (path / "acat_gene.parquet").exists()
         and (path / "sv_weighted.parquet").exists()
     )
@@ -128,7 +128,7 @@ def exact_lead_recurrence(master):
 def _stage_primary(args):
     metadata = pd.read_csv(args.traits, sep="\t")
     results_dir = args.project_root / "results"
-    output = results_dir / "sv_pleiotropy"
+    output = results_dir / "combined"
     master = build_master(results_dir, metadata)
     metadata_indexed = metadata.set_index("trait")
     master["broad_module"] = master["trait"].map(metadata_indexed["broad_module"])
@@ -141,12 +141,9 @@ def _stage_primary(args):
         recurrence["n_traits_all"] - recurrence["n_traits_non_ratio"]
     )
     output.mkdir(parents=True, exist_ok=True)
-    master.to_csv(output / "sv_pleiotropy_master.csv", index=False)
-    non_ratio.to_csv(output / "sv_pleiotropy_master.non_ratio_primary.csv", index=False)
-    recurrence.to_csv(output / "lead_sv_level_pleiotropy_summary.non_ratio_primary.csv", index=False)
-    recurrence.loc[recurrence["is_recurrent_non_ratio"]].to_csv(
-        output / "candidate_recurrent_lead_svs.non_ratio_primary.csv", index=False
-    )
+    master.to_csv(output / "gene_trait_associations_all_traits.csv", index=False)
+    non_ratio.to_csv(output / "gene_trait_associations.csv", index=False)
+    recurrence.to_csv(output / "lead_sv_summary.csv", index=False)
     print(
         f"{len(non_ratio)} associations, {non_ratio['gene_id'].nunique()} genes, "
         f"{non_ratio['lead_sv_id'].nunique()} exact lead SVs"
@@ -278,7 +275,7 @@ def run(master, results_dir):
         raise ValueError(f"Association master is missing columns: {sorted(missing)}")
     rows = []
     for trait, hits in master.groupby("trait", sort=True):
-        path = results_dir / trait / "sv_weighted.parquet"
+        path = results_dir / "traits" / trait / "sv_weighted.parquet"
         weighted = pd.read_parquet(path)
         rows.extend(decompose_hit(hit, weighted) for _, hit in hits.iterrows())
     return pd.DataFrame(rows)
@@ -326,18 +323,18 @@ def summarize_by_lead(detail):
 
 def _stage_decomposition(args):
     results_dir = args.project_root / "results"
-    output = results_dir / "sv_pleiotropy" / "driver_decomposition"
-    master = pd.read_csv(results_dir / "sv_pleiotropy" / "sv_pleiotropy_master.non_ratio_primary.csv")
+    output = results_dir / "combined" / "lead_removal"
+    master = pd.read_csv(results_dir / "combined" / "gene_trait_associations.csv")
     detail = run(master, results_dir)
     if len(detail) != len(master) or detail["driver_class"].eq("lead_missing_or_error").any():
         raise AssertionError("Lead-SV decomposition is incomplete")
     output.mkdir(parents=True, exist_ok=True)
-    detail.to_csv(output / "lead_sv_driver_decomposition.non_ratio_primary.csv", index=False)
+    detail.to_csv(output / "gene_trait_classification.csv", index=False)
     summary = detail.groupby("driver_class").size().rename("n").reset_index()
     summary["pct"] = 100 * summary["n"] / len(detail)
-    summary.to_csv(output / "driver_class_summary.csv", index=False)
+    summary.to_csv(output / "class_summary.csv", index=False)
     summarize_by_lead(detail).to_csv(
-        output / "lead_sv_driver_summary.non_ratio_primary.csv", index=False
+        output / "lead_sv_class_summary.csv", index=False
     )
     print(summary.to_string(index=False))
 
@@ -376,7 +373,7 @@ def interval_distance(
 
 
 def load_trait_sv(trait: str) -> pd.DataFrame:
-    path = RESULTS_DIR / trait / "sv_weighted.parquet"
+    path = RESULTS_DIR / "traits" / trait / "sv_weighted.parquet"
     if not path.exists():
         raise FileNotFoundError(path)
     columns = [
@@ -571,6 +568,8 @@ def criticality_permutation(
         "n_associations": len(eligible),
         "observed_lead_removal_count": observed,
         "random_removal_null_mean": null_mean,
+        "random_removal_null_95pct_low": float(np.quantile(null_counts, 0.025)),
+        "random_removal_null_95pct_high": float(np.quantile(null_counts, 0.975)),
         "observed_to_null_ratio": observed / null_mean if null_mean else np.inf,
         "empirical_upper_tail_p": (1 + int((null_counts >= observed).sum()))
         / (N_PERMUTATIONS + 1),
@@ -643,6 +642,8 @@ def locality_permutation(
             "n_associations": len(locality),
             "observed": observed,
             "null_mean": float(null_values.mean()),
+            "null_95pct_low": float(np.quantile(null_values, 0.025)),
+            "null_95pct_high": float(np.quantile(null_values, 0.975)),
             "observed_to_null_ratio": observed / null_values.mean()
             if null_values.mean() else np.inf,
             "empirical_p": (1 + int((null_values >= observed).sum()))
@@ -656,6 +657,8 @@ def locality_permutation(
         "n_associations": len(locality),
         "observed": observed_mean_distance,
         "null_mean": float(null_mean_distance.mean()),
+        "null_95pct_low": float(np.quantile(null_mean_distance, 0.025)),
+        "null_95pct_high": float(np.quantile(null_mean_distance, 0.975)),
         "observed_to_null_ratio": observed_mean_distance / null_mean_distance.mean()
         if null_mean_distance.mean() else np.nan,
         "empirical_p": (1 + int((null_mean_distance <= observed_mean_distance).sum()))
@@ -731,15 +734,13 @@ def _stage_criticality(args):
     ])
 
     outputs = {
-        "step33_leave_one_sv_out_detail.csv.gz": removal,
-        "step33_association_criticality.csv": association,
-        "step33_criticality_summary.csv": criticality_summary,
-        "step33_criticality_null_distribution.csv.gz": criticality_null,
-        "step33_locality_association_detail.csv": locality,
-        "step33_locality_summary.csv": locality_summary,
-        "step33_locality_null_distribution.csv.gz": locality_null,
-        "step33_decision_summary.csv": decision,
-        "step33_qc.csv": qc,
+        "leave_one_sv_out.csv.gz": removal,
+        "association_criticality.csv": association,
+        "random_removal_summary.csv": criticality_summary,
+        "residual_sv_detail.csv": locality,
+        "residual_sv_summary.csv": locality_summary,
+        "decision_summary.csv": decision,
+        "qc.csv": qc,
     }
     for filename, table in outputs.items():
         table.to_csv(OUT_DIR / filename, index=False)
@@ -768,15 +769,15 @@ def main():
     _stage_primary(args)
     _stage_decomposition(args)
 
-    global PROJECT_ROOT, RESULTS_DIR, PLEIOTROPY_DIR, DRIVER_PATH, OUT_DIR
+    global PROJECT_ROOT, RESULTS_DIR, COMBINED_DIR, DRIVER_PATH, OUT_DIR
     PROJECT_ROOT = args.project_root.expanduser().resolve()
     RESULTS_DIR = PROJECT_ROOT / "results"
-    PLEIOTROPY_DIR = RESULTS_DIR / "sv_pleiotropy"
+    COMBINED_DIR = RESULTS_DIR / "combined"
     DRIVER_PATH = (
-        PLEIOTROPY_DIR
-        / "driver_decomposition/lead_sv_driver_decomposition.non_ratio_primary.csv"
+        COMBINED_DIR
+        / "lead_removal/gene_trait_classification.csv"
     )
-    OUT_DIR = PLEIOTROPY_DIR / "lead_criticality_locality_audit"
+    OUT_DIR = COMBINED_DIR / "lead_sv_audit"
     _stage_criticality(args)
 
 

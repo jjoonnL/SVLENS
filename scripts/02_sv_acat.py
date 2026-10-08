@@ -23,18 +23,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from acat import run_acat_gene, SV_TYPES
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-BASE = ASSOC_DIR = SHARED_DIR = GENE_TABLE = GTF_PATH = None
+BASE = ASSOC_DIR = TRAITS_DIR = GENE_TABLE = GTF_PATH = None
 MAF_THRESHOLD = 0.05
 PROMOTER_WIN  = 2000
 SUMSTATS_SUFFIX = "_adjAgeSexYobPC_InvNorm"
 
 # ── Traits ───────────────────────────────────────────────────────────────────
 def set_project_root(root):
-    global BASE, ASSOC_DIR, SHARED_DIR, GENE_TABLE, GTF_PATH
+    global BASE, ASSOC_DIR, TRAITS_DIR, GENE_TABLE, GTF_PATH
     BASE = Path(root).expanduser().resolve()
     ASSOC_DIR = BASE / "SV_association"
-    SHARED_DIR = BASE / "results"
-    GENE_TABLE = SHARED_DIR / "gene_table.parquet"
+    TRAITS_DIR = BASE / "results" / "traits"
+    GENE_TABLE = BASE / "results" / "gene_table.parquet"
     GTF_PATH = BASE / "Gene_ref/gencode.v49.basic.annotation.gtf.gz"
 
 
@@ -106,7 +106,7 @@ def compute_feat_overlap(sv_gene_df, feat_track, flag_col):
 
 def run_step2(trait_name, gene_table, feat_track):
     sumstats_path = f"{ASSOC_DIR}/{trait_name}{SUMSTATS_SUFFIX}.txt.gz"
-    output_dir    = f"{SHARED_DIR}/{trait_name}"
+    output_dir    = f"{TRAITS_DIR}/{trait_name}"
     out_path      = f"{output_dir}/sv_annotated.parquet"
     os.makedirs(output_dir, exist_ok=True)
 
@@ -192,7 +192,7 @@ def run_step2(trait_name, gene_table, feat_track):
 # ════════════════════════════════════════════════════════════════════════════════
 
 def run_step3(trait_name):
-    output_dir = f"{SHARED_DIR}/{trait_name}"
+    output_dir = f"{TRAITS_DIR}/{trait_name}"
     in_path    = f"{output_dir}/sv_annotated.parquet"
 
     if not os.path.exists(in_path):
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     results = []
 
     for i, trait in enumerate(traits, 1):
-        output_dir     = f"{SHARED_DIR}/{trait}"
+        output_dir     = f"{TRAITS_DIR}/{trait}"
         annotated_path = f"{output_dir}/sv_annotated.parquet"
         weighted_path  = f"{output_dir}/sv_weighted.parquet"
 
