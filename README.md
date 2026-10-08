@@ -125,16 +125,16 @@ All files are written under `<DATA_ROOT>/results/`:
 
 ```text
 results/
-├── gene_table.parquet                 # GENCODE gene reference
-├── traits/<TRAIT>/                   # Per-trait SV–gene and ACAT results
-├── main/                             # Six principal results
-│   ├── gene_trait_associations.csv   # Significant non-ratio associations
-│   ├── lead_sv_summary.csv            # Exact lead-SV recurrence and locus flags
-│   ├── architecture_summary.csv       # Lead-removal classes and null comparisons
-│   ├── category_enrichment.csv        # Trait- and family-level enrichment
-│   ├── sv_feature_tests.csv           # Primary and origin-exclusion tests
-│   └── maf1_summary.csv               # MAF <1% comparison with the primary analysis
-└── work/                             # Files needed between steps and supporting tables
+├── gene_table.parquet                  # GENCODE gene reference
+├── traits/<TRAIT>/                     # Per-trait SV–gene and ACAT results
+├── main/                               # Six principal results
+│   ├── gene_trait_associations.csv     # Significant non-ratio associations
+│   ├── lead_sv_summary.csv             # Exact lead-SV recurrence and locus flags
+│   ├── architecture_summary.csv        # Lead-removal classes and null comparisons
+│   ├── category_enrichment.csv         # Trait- and family-level enrichment
+│   ├── sv_feature_tests.csv            # Primary and origin-exclusion tests
+│   └── maf1_summary.csv                # MAF <1% comparison with the primary analysis
+└── work/                               # Files needed between steps and supporting tables
 ```
 
 Each `traits/<TRAIT>/` folder contains `sv_annotated.parquet`, `sv_weighted.parquet`, and `acat_gene.parquet`. The `work/` folder holds the all-trait association table, lead-removal detail, and supporting feature and MAF <1% tables. The six `main/` files are the starting point for inspecting the results.
