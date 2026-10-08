@@ -17,30 +17,18 @@ def main():
 
     PROJECT_ROOT = args.project_root.expanduser().resolve()
 
-    RESULT_DIR = PROJECT_ROOT / "results" / "combined"
-    OUT_DIR = RESULT_DIR / "sv_features"
+    RESULT_DIR = PROJECT_ROOT / "results" / "main"
+    OUT_DIR = PROJECT_ROOT / "results" / "work" / "sv_features"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    paths = {
-        "lead": RESULT_DIR / "lead_sv_summary.csv",
-        "recurrent": RESULT_DIR / "recurrent_lead_svs.csv",
-        "category_assignment": (
-            RESULT_DIR / "category_enrichment" / "category_assignment.csv"
-        ),
-        "origin_audit": RESULT_DIR / "locus_audit" / "lead_sv_origin_audit.csv",
-    }
-
-    missing_paths = [path for path in paths.values() if not path.exists()]
-    if missing_paths:
-        raise FileNotFoundError(
-            "Missing required input files:\n" + "\n".join(map(str, missing_paths))
-        )
+    lead_path = RESULT_DIR / "lead_sv_summary.csv"
+    if not lead_path.exists():
+        raise FileNotFoundError(lead_path)
 
     # Analysis block 3
-    lead = pd.read_csv(paths["lead"])
-    recurrent = pd.read_csv(paths["recurrent"])
-    category_assignment = pd.read_csv(paths["category_assignment"])
-    origin_audit = pd.read_csv(paths["origin_audit"])
+    lead = pd.read_csv(lead_path)
+    recurrent = lead.loc[lead["is_recurrent_non_ratio"].astype(bool)].copy()
+    category_assignment = recurrent
+    origin_audit = lead
 
     input_summary = pd.DataFrame(
         {
@@ -283,13 +271,8 @@ def main():
 
     # Analysis block 13
     master_path = OUT_DIR / "recurrent_lead_sv_feature_master.csv"
-    qc_path = OUT_DIR / "recurrent_lead_sv_feature_master_qc.csv"
-
     master.to_csv(master_path, index=False)
-    qc.to_csv(qc_path, index=False)
-
     print(f"Saved: {master_path}")
-    print(f"Saved: {qc_path}")
 
     # Analysis block 15
     from itertools import product
@@ -598,15 +581,12 @@ def main():
 
     continuous_summary_path = OUT_DIR / "primary_continuous_summary.csv"
     categorical_composition_path = OUT_DIR / "primary_categorical_composition.csv"
-    primary_tests_path = OUT_DIR / "primary_univariate_tests.csv"
 
     continuous_summary.to_csv(continuous_summary_path, index=False)
     categorical_composition.to_csv(categorical_composition_path, index=False)
-    primary_tests.to_csv(primary_tests_path, index=False)
 
     print(f"Saved: {continuous_summary_path}")
     print(f"Saved: {categorical_composition_path}")
-    print(f"Saved: {primary_tests_path}")
 
     # Analysis block 23
     expected_excluded_genes = {"CALR", "IGLL5", "TARP"}
@@ -790,71 +770,18 @@ def main():
         "adj_p_value_bh"
     ].lt(0.05)
 
-    comparison_columns = [
-        "feature",
-        "feature_label",
-        "feature_type",
-        "n_category_enriched",
-        "n_non_enriched",
-        "effect_name",
-        "effect",
-        "effect_ci_low",
-        "effect_ci_high",
-        "p_value",
-        "adj_p_value_bh",
-        "bh_significant_0_05",
-    ]
-    effect_comparison = primary_tests[comparison_columns].merge(
-        sensitivity_tests[comparison_columns],
-        on=["feature", "feature_label", "feature_type", "effect_name"],
-        how="inner",
-        validate="one_to_one",
-        suffixes=("_full", "_exclusion"),
-    )
-    effect_comparison["continuous_direction_preserved"] = np.where(
-        effect_comparison["feature_type"].eq("continuous"),
-        np.sign(effect_comparison["effect_full"])
-        == np.sign(effect_comparison["effect_exclusion"]),
-        np.nan,
-    )
-
-    categorical_composition_comparison = categorical_composition.merge(
-        sensitivity_categorical_composition,
-        on=["feature", "feature_label", "analysis_group", "level"],
-        how="inner",
-        validate="one_to_one",
-        suffixes=("_full", "_exclusion"),
-    )
-
-    excluded_path = OUT_DIR / "origin_excluded_recurrent_lead_svs.csv"
     sensitivity_continuous_path = OUT_DIR / "origin_exclusion_continuous_summary.csv"
     sensitivity_categorical_path = OUT_DIR / "origin_exclusion_categorical_composition.csv"
-    sensitivity_tests_path = OUT_DIR / "origin_exclusion_univariate_tests.csv"
-    effect_comparison_path = OUT_DIR / "origin_exclusion_effect_comparison.csv"
-    categorical_comparison_path = (
-        OUT_DIR / "origin_exclusion_categorical_composition_comparison.csv"
-    )
-
-    excluded_sv_details.to_csv(excluded_path, index=False)
     sensitivity_continuous_summary.to_csv(sensitivity_continuous_path, index=False)
     sensitivity_categorical_composition.to_csv(sensitivity_categorical_path, index=False)
-    sensitivity_tests.to_csv(sensitivity_tests_path, index=False)
-    effect_comparison.to_csv(effect_comparison_path, index=False)
-    categorical_composition_comparison.to_csv(categorical_comparison_path, index=False)
-
-    print(f"Saved: {excluded_path}")
     print(f"Saved: {sensitivity_continuous_path}")
     print(f"Saved: {sensitivity_categorical_path}")
-    print(f"Saved: {sensitivity_tests_path}")
-    print(f"Saved: {effect_comparison_path}")
-    print(f"Saved: {categorical_comparison_path}")
 
     # Analysis block 32
     import warnings
 
     import statsmodels.api as sm
     from scipy.stats import chi2
-    from statsmodels.stats.outliers_influence import variance_inflation_factor
 
     scale_source = master.copy()
     scale_source["log1p_n_traits"] = np.log1p(scale_source["n_traits"])
@@ -975,24 +902,9 @@ def main():
             ),
         }
 
-        vif_rows = []
-        for column_index, term in enumerate(predictors, start=1):
-            vif_rows.append(
-                {
-                    "model": model_name,
-                    "term": term,
-                    "term_label": TERM_LABELS[term],
-                    "vif": variance_inflation_factor(
-                        design.to_numpy(), column_index
-                    ),
-                }
-            )
-
         return (
-            result,
             pd.DataFrame(coefficient_rows),
             pd.DataFrame([diagnostic_row]),
-            pd.DataFrame(vif_rows),
         )
 
     # Analysis block 35
@@ -1021,65 +933,31 @@ def main():
         ),
     ]
 
-    model_results = {}
     coefficient_tables = []
     diagnostic_tables = []
-    vif_tables = []
 
     for model_name, model_data, predictors in model_specs:
-        result, coefficients, diagnostics, vif = run_logistic_model(
+        coefficients, diagnostics = run_logistic_model(
             model_data, model_name, predictors
         )
-        model_results[model_name] = result
         coefficient_tables.append(coefficients)
         diagnostic_tables.append(diagnostics)
-        vif_tables.append(vif)
 
     multivariable_coefficients = pd.concat(coefficient_tables, ignore_index=True)
     multivariable_diagnostics = pd.concat(diagnostic_tables, ignore_index=True)
-    multivariable_vif = pd.concat(vif_tables, ignore_index=True)
 
-
-    # Analysis block 37
-    primary_model_comparison = multivariable_coefficients.loc[
-        multivariable_coefficients["model"].isin(
-            ["Full primary", "Exclusion primary"]
-        )
-    ].pivot(
-        index=["term", "term_label"],
-        columns="model",
-        values=["odds_ratio", "or_ci_low", "or_ci_high", "p_value"],
-    )
-    primary_model_comparison.columns = [
-        f"{metric}_{model.lower().replace(' ', '_')}"
-        for metric, model in primary_model_comparison.columns
-    ]
-    primary_model_comparison = primary_model_comparison.reset_index()
-
-    predictor_correlation = full_model_data[
-        primary_predictors + ["z_log1p_n_traits"]
-    ].corr(method="spearman")
-
-    scaling_path = OUT_DIR / "multivariable_predictor_scaling.csv"
     coefficients_path = OUT_DIR / "multivariable_logistic_coefficients.csv"
     diagnostics_path = OUT_DIR / "multivariable_model_diagnostics.csv"
-    vif_path = OUT_DIR / "multivariable_vif.csv"
-    comparison_path = OUT_DIR / "multivariable_primary_effect_comparison.csv"
-    correlation_path = OUT_DIR / "multivariable_predictor_spearman_correlation.csv"
-
-    predictor_scaling.to_csv(scaling_path, index=False)
     multivariable_coefficients.to_csv(coefficients_path, index=False)
     multivariable_diagnostics.to_csv(diagnostics_path, index=False)
-    multivariable_vif.to_csv(vif_path, index=False)
-    primary_model_comparison.to_csv(comparison_path, index=False)
-    predictor_correlation.to_csv(correlation_path)
-
-    print(f"Saved: {scaling_path}")
     print(f"Saved: {coefficients_path}")
     print(f"Saved: {diagnostics_path}")
-    print(f"Saved: {vif_path}")
-    print(f"Saved: {comparison_path}")
-    print(f"Saved: {correlation_path}")
+
+    feature_tests = pd.concat([
+        primary_tests.assign(analysis_set="All recurrent lead SVs"),
+        sensitivity_tests.assign(analysis_set="Exclude flagged lead SVs"),
+    ], ignore_index=True)
+    feature_tests.to_csv(RESULT_DIR / "sv_feature_tests.csv", index=False)
 
 
 if __name__ == "__main__":

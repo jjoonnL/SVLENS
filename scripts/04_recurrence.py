@@ -100,17 +100,14 @@ def assign_qc_caution(master, raw_records):
 
 def _stage_qc(args):
     root = args.project_root.expanduser().resolve()
-    output = root / "results/combined"
-    master = pd.read_csv(output / "gene_trait_associations_all_traits.csv")
+    output = root / "results/main"
+    master = pd.read_csv(root / "results/work/gene_trait_associations_all_traits.csv")
     recurrent_all = set(
         master.groupby("lead_sv_id")["trait"].nunique().loc[lambda x: x.ge(2)].index
     )
     hits = master.loc[master["lead_sv_id"].isin(recurrent_all)]
     raw = scan_raw_leads(hits, root / "SV_association")
     qc = assign_qc_caution(hits, raw)
-    qc_dir = output / "locus_audit"
-    qc_dir.mkdir(parents=True, exist_ok=True)
-    qc.to_csv(qc_dir / "lead_sv_qc.csv", index=False)
     lead_path = output / "lead_sv_summary.csv"
     lead = pd.read_csv(lead_path)
     fields = ["lead_sv_id", "case_tier", "qc_caution_reason", "median_approx_mac", "min_approx_mac", "min_info"]
@@ -330,8 +327,8 @@ def run(master, metadata, n_permutations=N_PERMUTATIONS):
 
 
 def _stage_enrichment(args):
-    base = args.project_root / "results/combined"
-    master = pd.read_csv(base / "gene_trait_associations_all_traits.csv")
+    base = args.project_root / "results/main"
+    master = pd.read_csv(args.project_root / "results/work/gene_trait_associations_all_traits.csv")
     metadata = pd.read_csv(args.traits, sep="\t")
     module, pairs, _ = run(master, metadata)
     recurrence_path = base / "lead_sv_summary.csv"
@@ -347,21 +344,18 @@ def _stage_enrichment(args):
         individual_module[module_columns].rename(columns={"n_units": "n_units_no_ratio_permutation"}),
         on="lead_sv_id", how="left", validate="one_to_one",
     )
-    recurrence.to_csv(recurrence_path, index=False)
-    recurrence.loc[recurrence["is_recurrent_non_ratio"]].to_csv(
-        base / "recurrent_lead_svs.csv", index=False
-    )
-    output = base / "category_enrichment"
-    output.mkdir(parents=True, exist_ok=True)
-    module.to_csv(output / "recurrence_family_sensitivity.csv", index=False)
-    pairs.to_csv(output / "category_enrichment_sensitivity.csv", index=False)
     individual_pairs = pairs.loc[pairs["scenario"].eq("no_ratio")].copy()
     assignment = category_assignment(individual_pairs, recurrence)
-    individual_pairs.rename(columns={
-        "n_units": "n_traits_non_ratio", "background_category_count": "background_trait_count",
-        "background_total_units": "background_total_traits",
-    }).to_csv(output / "trait_category_enrichment.csv", index=False)
-    assignment.to_csv(output / "category_assignment.csv", index=False)
+    assignment_columns = [
+        "lead_sv_id", "n_significant_categories", "significant_categories",
+        "significant_category_counts", "plot_group", "min_category_fdr",
+        "best_category_by_fdr", "observed_categories",
+    ]
+    recurrence = recurrence.merge(
+        assignment[assignment_columns], on="lead_sv_id", how="left", validate="one_to_one"
+    )
+    recurrence.to_csv(recurrence_path, index=False)
+    pairs.to_csv(base / "category_enrichment.csv", index=False)
     print(f"{len(module)} module rows and {len(pairs)} category-pair rows")
 
 
@@ -410,7 +404,7 @@ def target_assignment(master):
     return target
 
 
-def origin_audit(lead, category_assignment):
+def origin_audit(lead):
     parsed = lead["lead_sv_id"].str.extract(
         r"^chr(?P<chrom>[^:]+):(?P<start>\d+):<(?P<sv_type>[^:]+):SVSIZE=(?P<size>\d+)"
     )
@@ -468,14 +462,8 @@ def origin_audit(lead, category_assignment):
         default="other",
     )
     annotated["blood_derived_candidate"] = annotated["origin_class"].ne("other")
-    assignment = category_assignment[[
-        "lead_sv_id", "n_significant_categories", "plot_group", "significant_categories",
-    ]].copy()
-    assignment["is_category_enriched"] = assignment["n_significant_categories"].gt(0)
-    return annotated.merge(
-        assignment.drop(columns="n_significant_categories"), on="lead_sv_id", how="left",
-        validate="one_to_one",
-    )
+    annotated["is_category_enriched"] = annotated["n_significant_categories"].fillna(0).gt(0)
+    return annotated
 
 
 def exclusion_sensitivity(master, target, origin, category_pairs):
@@ -523,26 +511,21 @@ def exclusion_sensitivity(master, target, origin, category_pairs):
 
 
 def _stage_locus_audit(args):
-    base = args.project_root / "results/combined"
+    base = args.project_root / "results/main"
     master = pd.read_csv(base / "gene_trait_associations.csv")
     lead = pd.read_csv(base / "lead_sv_summary.csv")
-    assignment = pd.read_csv(
-        base / "category_enrichment/category_assignment.csv"
-    )
-    category_pairs = pd.read_csv(
-        base / "category_enrichment/trait_category_enrichment.csv"
-    )
+    category_pairs = pd.read_csv(base / "category_enrichment.csv")
+    category_pairs = category_pairs.loc[category_pairs["scenario"].eq("no_ratio")].copy()
     target = target_assignment(master)
-    origin = origin_audit(lead, assignment)
-    filtered_pairs, sensitivity = exclusion_sensitivity(master, target, origin, category_pairs)
-    audit_out = base / "locus_audit"
-    audit_out.mkdir(parents=True, exist_ok=True)
-    target.to_csv(audit_out / "lead_sv_gene_assignment.csv", index=False)
-    origin.to_csv(audit_out / "lead_sv_origin_audit.csv", index=False)
-    filtered_pairs.to_csv(
-        audit_out / "category_enrichment_excluding_blood_derived_candidates.csv", index=False
-    )
-    sensitivity.to_csv(audit_out / "core_architecture_exclusion_sensitivity.csv", index=False)
+    origin = origin_audit(lead)
+    _, sensitivity = exclusion_sensitivity(master, target, origin, category_pairs)
+    origin_columns = [
+        "lead_sv_id", "within_immune_locus", "known_somatic_label",
+        "origin_class", "blood_derived_candidate",
+    ]
+    lead = lead.merge(origin[origin_columns], on="lead_sv_id", how="left", validate="one_to_one")
+    lead.to_csv(base / "lead_sv_summary.csv", index=False)
+    sensitivity.to_csv(args.project_root / "results/work/origin_exclusion_summary.csv", index=False)
     print(f"{len(target)} target rows; {int(origin['blood_derived_candidate'].sum())} flagged lead SVs")
 
 

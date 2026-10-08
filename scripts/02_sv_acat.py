@@ -20,7 +20,7 @@ from scipy.stats import beta as beta_dist
 from statsmodels.stats.multitest import multipletests
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from acat import run_acat_gene, SV_TYPES
+from acat import run_acat_gene
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 BASE = ASSOC_DIR = TRAITS_DIR = GENE_TABLE = GTF_PATH = None
@@ -210,20 +210,11 @@ def run_step3(trait_name):
         "w_maf","w_final"]].to_parquet(f"{output_dir}/sv_weighted.parquet", index=False)
 
     # Full ACAT
-    acat_stratum, acat_gene = run_acat_gene(sv, min_sv=1)
+    _, acat_gene = run_acat_gene(sv, min_sv=1)
     bonf = 0.05 / len(acat_gene)
     _, fdr, _, _ = multipletests(acat_gene["p_acat_o"].values, method="fdr_bh")
     acat_gene["fdr"] = fdr
-    acat_stratum.to_parquet(f"{output_dir}/acat_stratum.parquet", index=False)
     acat_gene.to_parquet(f"{output_dir}/acat_gene.parquet", index=False)
-
-    # Functional mask
-    func_mask = sv["is_cds"] | sv["is_utr"] | sv["is_promoter"]
-    intr_mask = sv["is_intronic"] & ~sv["is_cds"] & ~sv["is_utr"] & ~sv["is_promoter"]
-    _, acat_gene_func     = run_acat_gene(sv[func_mask],     min_sv=1)
-    _, acat_gene_intronic = run_acat_gene(sv[intr_mask],     min_sv=1)
-    acat_gene_func.to_parquet(f"{output_dir}/acat_gene_functional.parquet", index=False)
-    acat_gene_intronic.to_parquet(f"{output_dir}/acat_gene_intronic.parquet", index=False)
 
     n_hits = (acat_gene["p_acat_o"] < bonf).sum()
     return n_hits

@@ -128,7 +128,8 @@ def exact_lead_recurrence(master):
 def _stage_primary(args):
     metadata = pd.read_csv(args.traits, sep="\t")
     results_dir = args.project_root / "results"
-    output = results_dir / "combined"
+    output = results_dir / "main"
+    work = results_dir / "work"
     master = build_master(results_dir, metadata)
     metadata_indexed = metadata.set_index("trait")
     master["broad_module"] = master["trait"].map(metadata_indexed["broad_module"])
@@ -141,7 +142,8 @@ def _stage_primary(args):
         recurrence["n_traits_all"] - recurrence["n_traits_non_ratio"]
     )
     output.mkdir(parents=True, exist_ok=True)
-    master.to_csv(output / "gene_trait_associations_all_traits.csv", index=False)
+    work.mkdir(parents=True, exist_ok=True)
+    master.to_csv(work / "gene_trait_associations_all_traits.csv", index=False)
     non_ratio.to_csv(output / "gene_trait_associations.csv", index=False)
     recurrence.to_csv(output / "lead_sv_summary.csv", index=False)
     print(
@@ -281,61 +283,17 @@ def run(master, results_dir):
     return pd.DataFrame(rows)
 
 
-def semicolon_join(values):
-    return "; ".join(sorted(pd.Series(values).dropna().astype(str).unique()))
-
-
-def summarize_by_lead(detail):
-    summary = (
-        detail.groupby(["lead_sv_id", "gene_name"], dropna=False)
-        .agg(
-            n_gene_trait_hits=("trait", "nunique"),
-            traits=("trait", semicolon_join),
-            driver_classes=("driver_class", semicolon_join),
-            n_single_sv_only=("driver_class", lambda x: int(x.eq("single_sv_only").sum())),
-            n_lead_anchored=("driver_class", lambda x: int(x.eq("lead_anchored").sum())),
-            n_multi_sv_supported=("driver_class", lambda x: int(x.eq("multi_sv_supported").sum())),
-            n_lead_missing_or_error=("driver_class", lambda x: int(x.eq("lead_missing_or_error").sum())),
-            median_n_unique_sv_original=("n_unique_sv_original", "median"),
-            median_lead_rank_by_pval=("lead_rank_by_pval", "median"),
-            median_lead_second_log10_margin=("lead_second_log10_margin", "median"),
-            median_delta_neglog10_original_minus_without=("delta_neglog10_original_minus_without", "median"),
-            min_without_lead_p=("p_acat_o_without_lead", "min"),
-            any_without_lead_bonf=("without_lead_bonf_significant", "max"),
-            any_lead_not_best=("lead_not_best_by_pval", "max"),
-            any_low_margin_to_second=("low_margin_to_second_sv", "max"),
-            lead_sv_maf=("lead_sv_maf", "first"),
-            lead_sv_type=("lead_sv_type", "first"),
-            lead_sv_layer=("lead_sv_layer", semicolon_join),
-            support_classes=("support_class_final", semicolon_join),
-        )
-        .reset_index()
-    )
-    summary["frac_lead_anchored_or_single"] = (
-        (summary["n_single_sv_only"] + summary["n_lead_anchored"])
-        / summary["n_gene_trait_hits"]
-    )
-    summary["frac_multi_sv_supported"] = summary["n_multi_sv_supported"] / summary["n_gene_trait_hits"]
-    return summary.sort_values(
-        ["n_gene_trait_hits", "frac_lead_anchored_or_single"], ascending=[False, False]
-    ).reset_index(drop=True)
-
-
 def _stage_decomposition(args):
     results_dir = args.project_root / "results"
-    output = results_dir / "combined" / "lead_removal"
-    master = pd.read_csv(results_dir / "combined" / "gene_trait_associations.csv")
+    output = results_dir / "work"
+    master = pd.read_csv(results_dir / "main" / "gene_trait_associations.csv")
     detail = run(master, results_dir)
     if len(detail) != len(master) or detail["driver_class"].eq("lead_missing_or_error").any():
         raise AssertionError("Lead-SV decomposition is incomplete")
     output.mkdir(parents=True, exist_ok=True)
-    detail.to_csv(output / "gene_trait_classification.csv", index=False)
+    detail.to_csv(output / "lead_removal_detail.csv", index=False)
     summary = detail.groupby("driver_class").size().rename("n").reset_index()
     summary["pct"] = 100 * summary["n"] / len(detail)
-    summary.to_csv(output / "class_summary.csv", index=False)
-    summarize_by_lead(detail).to_csv(
-        output / "lead_sv_class_summary.csv", index=False
-    )
     print(summary.to_string(index=False))
 
 
@@ -680,32 +638,6 @@ def _stage_criticality(args):
     locality_summary, locality_null = locality_permutation(locality, rng)
 
     driver_counts = association["recalculated_driver_class"].value_counts()
-    decision = pd.DataFrame([
-        {
-            "question": "Is lead removal more disruptive than random member removal?",
-            "result": (
-                f"{int(criticality_summary.iloc[0]['observed_lead_removal_count'])} "
-                f"observed vs {criticality_summary.iloc[0]['random_removal_null_mean']:.2f} "
-                "expected"
-            ),
-            "interpretation_limit": (
-                "Supports statistical concentration on the minimum-P SV; does not "
-                "separate biology from the behavior of ACAT under sparse signals."
-            ),
-        },
-        {
-            "question": "Are strongest residual SVs unusually local within their gene sets?",
-            "result": (
-                f"{int(locality['observed_within_250kb'].sum())}/"
-                f"{len(locality)} within 250 kb; see conditional geometry null"
-            ),
-            "interpretation_limit": (
-                "Conditions on observed within-gene candidate SVs; does not establish "
-                "independent alleles, LD, haplotypes, or causality."
-            ),
-        },
-    ])
-
     qc = pd.DataFrame([
         {"check": "404 primary associations", "value": len(association),
          "expected": 404, "passed": len(association) == 404},
@@ -733,18 +665,6 @@ def _stage_criticality(args):
          "expected": N_PERMUTATIONS, "passed": len(locality_null) == N_PERMUTATIONS},
     ])
 
-    outputs = {
-        "leave_one_sv_out.csv.gz": removal,
-        "association_criticality.csv": association,
-        "random_removal_summary.csv": criticality_summary,
-        "residual_sv_detail.csv": locality,
-        "residual_sv_summary.csv": locality_summary,
-        "decision_summary.csv": decision,
-        "qc.csv": qc,
-    }
-    for filename, table in outputs.items():
-        table.to_csv(OUT_DIR / filename, index=False)
-
     print("Driver classes")
     print(driver_counts.to_string())
     print("\nLead criticality")
@@ -756,6 +676,30 @@ def _stage_criticality(args):
     if not qc["passed"].all():
         failed = qc.loc[~qc["passed"], "check"].tolist()
         raise AssertionError(f"Step 33 QC failed: {failed}")
+
+    rows = [
+        {
+            "analysis": "lead_removal_class",
+            "metric": name,
+            "n_associations": len(association),
+            "observed": int(count),
+            "observed_percent": 100 * count / len(association),
+        }
+        for name, count in driver_counts.items()
+    ]
+    criticality = criticality_summary.iloc[0]
+    rows.append({
+        "analysis": "random_removal",
+        "metric": criticality["metric"],
+        "n_associations": int(criticality["n_associations"]),
+        "observed": int(criticality["observed_lead_removal_count"]),
+        "null_mean": float(criticality["random_removal_null_mean"]),
+        "null_95pct_low": float(criticality["random_removal_null_95pct_low"]),
+        "null_95pct_high": float(criticality["random_removal_null_95pct_high"]),
+        "empirical_p": float(criticality["empirical_upper_tail_p"]),
+    })
+    rows.extend({"analysis": "residual_sv", **row} for row in locality_summary.to_dict("records"))
+    pd.DataFrame(rows).to_csv(OUT_DIR / "architecture_summary.csv", index=False)
 
 
 def main():
@@ -769,15 +713,14 @@ def main():
     _stage_primary(args)
     _stage_decomposition(args)
 
-    global PROJECT_ROOT, RESULTS_DIR, COMBINED_DIR, DRIVER_PATH, OUT_DIR
+    global PROJECT_ROOT, RESULTS_DIR, MAIN_DIR, DRIVER_PATH, OUT_DIR
     PROJECT_ROOT = args.project_root.expanduser().resolve()
     RESULTS_DIR = PROJECT_ROOT / "results"
-    COMBINED_DIR = RESULTS_DIR / "combined"
+    MAIN_DIR = RESULTS_DIR / "main"
     DRIVER_PATH = (
-        COMBINED_DIR
-        / "lead_removal/gene_trait_classification.csv"
+        RESULTS_DIR / "work" / "lead_removal_detail.csv"
     )
-    OUT_DIR = COMBINED_DIR / "lead_sv_audit"
+    OUT_DIR = MAIN_DIR
     _stage_criticality(args)
 
 

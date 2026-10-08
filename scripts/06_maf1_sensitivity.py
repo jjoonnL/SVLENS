@@ -348,8 +348,8 @@ def main() -> None:
     global PROJECT_ROOT, RESULTS_DIR, PRIMARY_DIR, OUT_DIR
     PROJECT_ROOT = args.project_root.expanduser().resolve()
     RESULTS_DIR = PROJECT_ROOT / "results"
-    PRIMARY_DIR = RESULTS_DIR / "combined"
-    OUT_DIR = PRIMARY_DIR / "maf1_sensitivity"
+    PRIMARY_DIR = RESULTS_DIR / "main"
+    OUT_DIR = RESULTS_DIR / "work" / "maf1_sensitivity"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     trait_paths = sorted((RESULTS_DIR / "traits").glob("*/sv_weighted.parquet"))
     trait_paths = [p for p in trait_paths if p.parent.name not in RATIO_TRAITS]
@@ -360,10 +360,8 @@ def main() -> None:
         raise ValueError(f"Missing trait categories: {missing_categories}")
 
     association_chunks: list[pd.DataFrame] = []
-    trait_rows: list[dict[str, object]] = []
     for index, path in enumerate(trait_paths, start=1):
         associations, summary = analyze_trait(path)
-        trait_rows.append(summary)
         if not associations.empty:
             association_chunks.append(associations)
         print(
@@ -372,8 +370,6 @@ def main() -> None:
         )
 
     associations = pd.concat(association_chunks, ignore_index=True)
-    trait_summary = pd.DataFrame(trait_rows)
-
     lead_summary = (
         associations.groupby("lead_sv_id", as_index=False)
         .agg(
@@ -443,9 +439,9 @@ def main() -> None:
     primary_leads = pd.read_csv(
         PRIMARY_DIR / "lead_sv_summary.csv"
     )
-    primary_category = pd.read_csv(
-        PRIMARY_DIR / "category_enrichment/category_assignment.csv"
-    )
+    primary_category = primary_leads.loc[
+        primary_leads["is_recurrent_non_ratio"].astype(bool)
+    ].copy()
 
     primary_lead_trait = primary_associations[
         ["lead_sv_id", "trait", "trait_category"]
@@ -555,19 +551,6 @@ def main() -> None:
          "passed": len(maf1_keys - primary_keys) == 0},
     ])
 
-    outputs = {
-        "trait_summary.csv": trait_summary,
-        "gene_trait_associations.csv": associations,
-        "lead_sv_summary.csv": lead_summary,
-        "trait_category_enrichment.csv": category_tests,
-        "family_category_enrichment.csv": family_tests,
-        "recurrent_feature_comparison.csv": feature_comparison,
-        "primary_comparison.csv": comparison,
-        "qc.csv": qc,
-    }
-    for filename, table in outputs.items():
-        table.to_csv(OUT_DIR / filename, index=False)
-
     print("\nPrimary comparison")
     print(comparison.to_string(index=False))
     print("\nQC")
@@ -575,6 +558,17 @@ def main() -> None:
     if not qc["passed"].all():
         failed = qc.loc[~qc["passed"], "check"].tolist()
         raise AssertionError(f"Step 32 QC failed: {failed}")
+
+    outputs = {
+        "gene_trait_associations.csv": associations,
+        "lead_sv_summary.csv": lead_summary,
+        "trait_category_enrichment.csv": category_tests,
+        "family_category_enrichment.csv": family_tests,
+        "recurrent_feature_comparison.csv": feature_comparison,
+    }
+    for filename, table in outputs.items():
+        table.to_csv(OUT_DIR / filename, index=False)
+    comparison.to_csv(PRIMARY_DIR / "maf1_summary.csv", index=False)
 
 
 if __name__ == "__main__":
