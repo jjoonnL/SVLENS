@@ -1,11 +1,11 @@
-# SV association architecture
+# SVLENS
 
 Code for *Gene-level analysis of structural variants reveals a lead-variant-centered signal architecture and phenotype-structured recurrence*.
 
 ## Project structure
 
 ```text
-sv-association-architecture/
+SVLENS/
 ├── scripts/             # Six analysis stages, in execution order
 ├── src/acat.py          # Shared ACAT implementation
 ├── metadata/            # Trait categories, families, and ratio flags
@@ -19,8 +19,8 @@ sv-association-architecture/
 1. Clone the repository and enter it:
 
    ```bash
-   git clone https://github.com/jjoonnL/sv-association-architecture.git
-   cd sv-association-architecture
+   git clone https://github.com/jjoonnL/SVLENS.git
+   cd SVLENS
    ```
 
 2. Create and activate a Conda environment (recommended):
